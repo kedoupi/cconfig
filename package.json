@@ -1,0 +1,53 @@
+{
+  "name": "claude-code-kit",
+  "version": "1.0.0",
+  "description": "Claude Code 配置工具集 - 支持多服务商API切换和配置管理",
+  "main": "src/index.js",
+  "bin": {
+    "cc-config": "bin/cc-config.js"
+  },
+  "scripts": {
+    "start": "node bin/cc-config.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/ bin/ --ext .js",
+    "lint:fix": "eslint src/ bin/ --ext .js --fix",
+    "format": "prettier --write \"src/**/*.js\" \"bin/**/*.js\" \"tests/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"bin/**/*.js\" \"tests/**/*.js\"",
+    "dev": "nodemon bin/cc-config.js"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "cli",
+    "configuration",
+    "api",
+    "anthropic"
+  ],
+  "author": "RenYuan <kedoupi@gmail.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.1.1",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.53.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.6.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kedoupi/claude-code-kit.git"
+  }
+}
