@@ -14,6 +14,9 @@ const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 
+// Import package.json for version
+const packageJson = require('../package.json');
+
 // Import core modules
 const ConfigManager = require('../src/core/ConfigManager');
 const ProviderManager = require('../src/core/ProviderManager');
@@ -38,7 +41,7 @@ const program = new Command();
 program
   .name('cc-config')
   .description('Claude Code Kit Configuration Manager')
-  .version('1.0.7');
+  .version(packageJson.version);
 
 
 // Provider management commands
