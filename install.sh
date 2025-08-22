@@ -405,40 +405,127 @@ EOF
     INSTALLATION_STATE="backup_completed"
 }
 
-# Deploy configuration templates
+# Deploy configuration templates using unified update mechanism
 deploy_configurations() {
     info "Deploying configuration templates..."
     
-    # Create directories
+    # Create base directory
     mkdir -p "$CLAUDE_CONFIG_DIR"
-    mkdir -p "$CLAUDE_CONFIG_DIR/commands"
-    mkdir -p "$CLAUDE_CONFIG_DIR/agents"
-    mkdir -p "$CLAUDE_CONFIG_DIR/output-styles"
     
-    # Copy configuration templates from this repository
+    # Try to use cc-config update for unified deployment
+    if deploy_via_cc_config_update; then
+        success "Configuration deployed successfully via cc-config update"
+        return
+    fi
+    
+    # Fallback: use local templates if cc-config update fails
+    warn "Falling back to local configuration deployment..."
+    deploy_local_templates
+}
+
+# Deploy configurations using cc-config update (unified mechanism)
+deploy_via_cc_config_update() {
+    # Check if cc-config is available
+    if ! command_exists cc-config; then
+        debug "cc-config not available yet, skipping unified deployment"
+        return 1
+    fi
+    
+    # Check network connectivity
+    if ! check_network_connectivity; then
+        debug "No network connectivity, skipping remote deployment"
+        return 1
+    fi
+    
+    info "Using cc-config update for configuration deployment..."
+    
+    # Set development mode to use local source if available
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     
     if [ -d "$script_dir/.claude" ]; then
-        info "Found complete configuration templates in project directory"
+        export CC_DEV_MODE=true
+        debug "Development mode enabled - using local .claude source"
+    fi
+    
+    # Execute cc-config update with force flag for initial deployment
+    if cc-config update --force 2>/dev/null; then
+        # List deployed components
+        list_deployed_components
+        return 0
+    else
+        warn "cc-config update failed, will use fallback method"
+        return 1
+    fi
+}
+
+# Check network connectivity to GitHub
+check_network_connectivity() {
+    info "Checking network connectivity..."
+    
+    # Try to ping GitHub (timeout 5 seconds)
+    if command_exists curl; then
+        if curl -s --connect-timeout 5 --max-time 10 https://github.com >/dev/null 2>&1; then
+            debug "Network connectivity confirmed via curl"
+            return 0
+        fi
+    elif command_exists wget; then
+        if wget --spider --timeout=5 --tries=1 https://github.com >/dev/null 2>&1; then
+            debug "Network connectivity confirmed via wget"
+            return 0
+        fi
+    elif command_exists ping; then
+        if ping -c 1 -W 5 github.com >/dev/null 2>&1; then
+            debug "Network connectivity confirmed via ping"
+            return 0
+        fi
+    fi
+    
+    debug "Network connectivity check failed"
+    return 1
+}
+
+# Deploy local templates (fallback method)
+deploy_local_templates() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    # Create subdirectories
+    mkdir -p "$CLAUDE_CONFIG_DIR/commands"
+    mkdir -p "$CLAUDE_CONFIG_DIR/agents"
+    mkdir -p "$CLAUDE_CONFIG_DIR/output-styles"
+    
+    if [ -d "$script_dir/.claude" ]; then
+        info "Found local configuration templates"
         cp -r "$script_dir/.claude"/* "$CLAUDE_CONFIG_DIR/"
-        success "Complete configuration templates deployed successfully"
+        success "Local configuration templates deployed successfully"
         
         # List deployed components
-        info "Deployed components:"
-        if [ -d "$CLAUDE_CONFIG_DIR/agents" ]; then
-            echo "  • $(ls "$CLAUDE_CONFIG_DIR/agents" | wc -l | tr -d ' ') agent definitions"
-        fi
-        if [ -d "$CLAUDE_CONFIG_DIR/commands" ]; then
-            echo "  • $(ls "$CLAUDE_CONFIG_DIR/commands" | wc -l | tr -d ' ') command templates"
-        fi
-        if [ -d "$CLAUDE_CONFIG_DIR/output-styles" ]; then
-            echo "  • $(ls "$CLAUDE_CONFIG_DIR/output-styles" | wc -l | tr -d ' ') output styles"
-        fi
+        list_deployed_components
     else
-        warn "Configuration templates not found in $script_dir/.claude"
+        warn "No local configuration templates found"
         warn "Creating minimal configuration..."
         create_minimal_config
+    fi
+}
+
+# List deployed components
+list_deployed_components() {
+    info "Deployed components:"
+    if [ -d "$CLAUDE_CONFIG_DIR/agents" ]; then
+        local agent_count
+        agent_count=$(ls "$CLAUDE_CONFIG_DIR/agents" | wc -l | tr -d ' ')
+        echo "  • $agent_count agent definitions"
+    fi
+    if [ -d "$CLAUDE_CONFIG_DIR/commands" ]; then
+        local command_count
+        command_count=$(ls "$CLAUDE_CONFIG_DIR/commands" | wc -l | tr -d ' ')
+        echo "  • $command_count command templates"
+    fi
+    if [ -d "$CLAUDE_CONFIG_DIR/output-styles" ]; then
+        local style_count
+        style_count=$(ls "$CLAUDE_CONFIG_DIR/output-styles" | wc -l | tr -d ' ')
+        echo "  • $style_count output styles"
     fi
 }
 
@@ -781,6 +868,9 @@ main() {
     step "Installing Claude Code CLI"
     install_claude_code
     
+    step "Installing cc-config management tool"
+    install_cc_config_tool
+    
     step "Setting up configuration directories"
     setup_cc_config_directory
     
@@ -798,9 +888,6 @@ main() {
     
     step "Generating shell aliases"
     generate_aliases
-    
-    step "Installing cc-config management tool"
-    install_cc_config_tool
     
     step "Configuring shell integration"
     setup_shell_integration

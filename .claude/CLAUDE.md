@@ -3,15 +3,6 @@
 ## 语言设置
 始终使用中文回复，除非明确要求使用其他语言。
 
-## Git 提交配置
-所有 Git 提交操作必须使用以下作者信息：
-- Author: RenYuan <kedoupi@gmail.com>
-- 执行 git commit 前，确保设置正确的作者信息
-
-执行提交时使用：
-```bash
-git -c user.name="RenYuan" -c user.email="kedoupi@gmail.com" commit -m "你的提交信息"
-```
 
 ## 通用工作原则
 1. **需求优先**：请先全面分析当前需求，列出可能的解决方案，并清晰解释每个方案的优缺点
