@@ -19,6 +19,7 @@ const ConfigManager = require('../src/core/ConfigManager');
 const ProviderManager = require('../src/core/ProviderManager');
 const BackupManager = require('../src/core/BackupManager');
 const AliasGenerator = require('../src/core/AliasGenerator');
+const UpdateManager = require('../src/core/UpdateManager');
 
 // Configuration
 const CONFIG_DIR = path.join(os.homedir(), '.cc-config');
@@ -29,6 +30,7 @@ const configManager = new ConfigManager(CONFIG_DIR);
 const providerManager = new ProviderManager(CONFIG_DIR);
 const backupManager = new BackupManager(CONFIG_DIR, CLAUDE_DIR);
 const aliasGenerator = new AliasGenerator(CONFIG_DIR);
+const updateManager = new UpdateManager(CONFIG_DIR, CLAUDE_DIR);
 
 // Main CLI program
 const program = new Command();
@@ -314,16 +316,55 @@ providerCmd
 // Configuration management commands
 program
   .command('update')
-  .description('Update configuration templates')
+  .description('Update configuration templates from GitHub')
   .option('--force', 'Force update without confirmation')
+  .option('--check', 'Check for updates without installing')
   .action(async (options) => {
     try {
+      await configManager.init();
+
+      // Check for updates first
+      if (options.check) {
+        const spinner = ora('Checking for updates...').start();
+        const updateInfo = await updateManager.checkForUpdates();
+        spinner.stop();
+
+        console.log(chalk.blue('\n🔍 Update Check Results\n'));
+        console.log(`Local version:  ${chalk.cyan(updateInfo.localVersion)}`);
+        console.log(`Remote version: ${chalk.cyan(updateInfo.remoteVersion)}`);
+        
+        if (updateInfo.hasUpdate) {
+          console.log(chalk.green('\n✨ Updates available!'));
+          console.log('Run "cc-config update" to install the latest version.');
+        } else {
+          console.log(chalk.green('\n✅ You have the latest configuration!'));
+        }
+        return;
+      }
+
+      // Check for updates before proceeding
+      const spinner1 = ora('Checking for updates...').start();
+      const updateInfo = await updateManager.checkForUpdates();
+      spinner1.stop();
+
+      if (!updateInfo.hasUpdate) {
+        console.log(chalk.green('\n✅ You already have the latest configuration!'));
+        console.log(`Current version: ${chalk.cyan(updateInfo.localVersion)}`);
+        return;
+      }
+
+      console.log(chalk.blue('\n📦 Update Available\n'));
+      console.log(`Current version: ${chalk.cyan(updateInfo.localVersion)}`);
+      console.log(`Latest version:  ${chalk.green(updateInfo.remoteVersion)}`);
+      console.log();
+
+      // Confirm update
       if (!options.force) {
         const { confirm } = await inquirer.prompt([
           {
             type: 'confirm',
             name: 'confirm',
-            message: 'This will update your configuration templates. Continue?',
+            message: 'Update configuration templates to the latest version?',
             default: true
           }
         ]);
@@ -334,21 +375,40 @@ program
         }
       }
 
-      const spinner = ora('Updating configuration...').start();
-
-      await configManager.init();
+      // Perform update
+      const updateSpinner = ora('Downloading and updating configuration...').start();
       
       // Create backup before update
-      const timestamp = await backupManager.createBackup('Pre-update backup');
+      const backupTimestamp = await backupManager.createBackup('Pre-update backup');
+      updateSpinner.text = 'Backup created, applying updates...';
+
+      // Perform the update
+      const result = await updateManager.performUpdate({
+        force: options.force,
+        backupName: 'Pre-update backup'
+      });
+
+      updateSpinner.succeed(chalk.green('Configuration updated successfully!'));
+
+      console.log(chalk.blue('\n🎉 Update Summary\n'));
+      console.log(`✅ Updated to version: ${chalk.green(result.version)}`);
+      console.log(`📦 Backup created: ${chalk.cyan(backupTimestamp)}`);
+      console.log();
       
-      // TODO: Implement configuration update logic
-      // This would download latest templates from GitHub
-      
-      spinner.succeed(chalk.green('Configuration updated successfully!'));
-      console.log(chalk.blue(`Backup created: ${timestamp}`));
+      console.log(chalk.blue('📝 What was updated:'));
+      console.log('  • Agent definitions (architect, developer, etc.)');
+      console.log('  • Command templates (ask, specs, docs, etc.)');
+      console.log('  • Output styles and configurations');
+      console.log('  • System settings and metadata');
+      console.log();
+
+      console.log(chalk.green('🚀 Your Claude Code configuration is now up to date!'));
+      console.log('💡 Restart your terminal or reload your shell configuration to use the latest features.');
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error updating configuration:'), error.message);
+      console.log(chalk.yellow('\n🔄 If the update failed, you can restore from backup with:'));
+      console.log('   cc-config history');
       process.exit(1);
     }
   });
