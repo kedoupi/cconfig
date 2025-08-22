@@ -30,22 +30,22 @@ log_with_timestamp() {
 }
 
 info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}🔹 [INFO]${NC} $1"
     log_with_timestamp "INFO" "$1"
 }
 
 success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}✅ [SUCCESS]${NC} $1"
     log_with_timestamp "SUCCESS" "$1"
 }
 
 warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}⚠️  [WARN]${NC} $1"
     log_with_timestamp "WARN" "$1"
 }
 
 error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}❌ [ERROR]${NC} $1"
     log_with_timestamp "ERROR" "$1"
     ROLLBACK_NEEDED=true
     cleanup_and_exit 1
@@ -53,7 +53,7 @@ error() {
 
 debug() {
     if [ "${DEBUG:-false}" = "true" ]; then
-        echo -e "${NC}[DEBUG]${NC} $1"
+        echo -e "${NC}🔍 [DEBUG]${NC} $1"
         log_with_timestamp "DEBUG" "$1"
     fi
 }
@@ -66,6 +66,19 @@ BACKUPS_DIR="$CLAUDE_CODE_KIT_DIR/backups"
 ALIASES_FILE="$CLAUDE_CODE_KIT_DIR/aliases.sh"
 REQUIRED_NODE_VERSION="18"
 RECOMMENDED_NODE_VERSION="22"
+
+# Installation progress tracking
+CURRENT_STEP=0
+TOTAL_STEPS=9
+
+# Progress indicator function
+step() {
+    CURRENT_STEP=$((CURRENT_STEP + 1))
+    local title="$1"
+    echo
+    echo -e "${BLUE}📋 Step $CURRENT_STEP/$TOTAL_STEPS:${NC} $title"
+    echo -e "${BLUE}$(printf '━%.0s' $(seq 1 $CURRENT_STEP))$(printf '─%.0s' $(seq 1 $((TOTAL_STEPS - CURRENT_STEP))))${NC} ($((CURRENT_STEP * 100 / TOTAL_STEPS))%)"
+}
 
 # Add temp files to cleanup list
 add_temp_file() {
@@ -465,31 +478,39 @@ EOF
 
 # Configure default provider
 configure_default_provider() {
-    info "Configuring default provider..."
-    
     echo
-    echo "Please provide your Anthropic API configuration:"
+    echo -e "${BLUE}🔑 API Configuration${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}To use Claude, you need an API key from Anthropic.${NC}"
+    echo
+    echo -e "${YELLOW}💡 How to get your API key:${NC}"
+    echo "  1. Visit: https://console.anthropic.com/"
+    echo "  2. Sign up or log in to your account"
+    echo "  3. Go to API Keys section"
+    echo "  4. Create a new API key"
+    echo
     
-    # Get API Key
+    # Get API Key with better prompting
     while true; do
+        echo -e "${BLUE}🔐 Enter your Anthropic API key:${NC}"
         echo -n "API Key: "
         read -s api_key
         echo
         
         if [ -n "$api_key" ]; then
+            # Basic validation
+            if [ ${#api_key} -lt 10 ]; then
+                warn "API Key seems too short. Please check and try again."
+                continue
+            fi
             break
         else
             warn "API Key cannot be empty. Please try again."
         fi
     done
     
-    # Get Base URL (optional)
-    echo -n "Base URL (press Enter for default: https://api.anthropic.com): "
-    read base_url
-    
-    if [ -z "$base_url" ]; then
-        base_url="https://api.anthropic.com"
-    fi
+    # Use default base URL without asking (most users won't change this)
+    base_url="https://api.anthropic.com"
     
     # Create default provider configuration
     cat > "$PROVIDERS_DIR/default.json" << EOF
@@ -501,39 +522,43 @@ configure_default_provider() {
 }
 EOF
     
-    success "Default provider configured"
+    success "API configuration saved successfully!"
+    info "You can manage providers later with: cc-config provider list"
 }
 
-# Ask about additional provider
+# Ask about additional provider (simplified)
 configure_additional_provider() {
     echo
-    echo -n "Would you like to add an additional provider? (y/N): "
+    echo -e "${BLUE}🔧 Advanced Configuration (Optional)${NC}"
+    echo -n "Would you like to add additional API providers? (y/N): "
     read -r add_provider
     
     if [[ "$add_provider" =~ ^[Yy]$ ]]; then
-        echo -n "Provider alias (e.g., 'cc'): "
+        echo -e "${BLUE}ℹ️  You can add more providers later with:${NC}"
+        echo "   cc-config provider add"
+        echo
+        echo -n "Provider alias (e.g., 'claude-work'): "
         read alias
         
         echo -n "API Key: "
         read -s api_key
         echo
         
-        echo -n "Base URL: "
-        read base_url
-        
-        if [ -n "$alias" ] && [ -n "$api_key" ] && [ -n "$base_url" ]; then
+        if [ -n "$alias" ] && [ -n "$api_key" ]; then
             cat > "$PROVIDERS_DIR/$alias.json" << EOF
 {
     "alias": "$alias",
-    "baseURL": "$base_url", 
+    "baseURL": "https://api.anthropic.com", 
     "apiKey": "$api_key",
     "timeout": "3000000"
 }
 EOF
             success "Additional provider '$alias' configured"
         else
-            warn "Skipping additional provider due to missing information"
+            info "Skipped additional provider setup"
         fi
+    else
+        info "You can add more providers anytime with: cc-config provider add"
     fi
 }
 
@@ -727,41 +752,72 @@ check_dependencies() {
 
 # Main installation function
 main() {
-    echo "=================================================="
+    echo "🚀 =================================================="
     echo "      Claude Code Kit Installation Script"
+    echo "      Version 2.0.0 - Production Ready"
     echo "=================================================="
     echo
     
-    info "Starting Claude Code Kit installation..."
+    info "Welcome to Claude Code Kit installation!"
+    echo -e "${BLUE}📦 What will be installed:${NC}"
+    echo "  • Claude Code CLI (latest version)"
+    echo "  • Configuration management tools"
+    echo "  • Multi-provider support"
+    echo "  • Shell integration and aliases"
+    echo
     
-    # Check dependencies first
+    # Installation steps with progress indicators
+    step "Checking system dependencies"
     check_dependencies
     
-    # Main installation steps
+    step "Verifying Node.js installation"
     check_nodejs_version
+    
+    step "Installing Claude Code CLI"
     install_claude_code
+    
+    step "Setting up configuration directories"
     setup_cc_config_directory
+    
+    step "Creating backup of existing config"
     backup_existing_config
+    
+    step "Deploying configuration templates"
     deploy_configurations
+    
+    step "Configuring default provider"
     configure_default_provider
+    
+    step "Setting up additional providers"
     configure_additional_provider
+    
+    step "Generating shell aliases"
     generate_aliases
+    
+    step "Configuring shell integration"
     setup_shell_integration
-    install_cc_config_tool
     
     echo
-    echo "=================================================="
-    success "Claude Code Kit installation completed!"
+    echo "🎉 =================================================="
+    success "Claude Code Kit installation completed successfully!"
     echo "=================================================="
     echo
-    info "Next steps:"
-    echo "  1. Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)"
-    echo "  2. Test installation: claude --version"
-    echo "  3. Use your configured aliases (e.g., 'claude \"Hello\"')"
-    echo "  4. Manage providers with: cc-config provider list"
+    echo -e "${GREEN}✨ What's ready for you:${NC}"
+    echo "  ✅ Claude Code CLI is installed and configured"
+    echo "  ✅ Shell aliases are ready to use"
+    echo "  ✅ Provider management system is active"
+    echo "  ✅ Automatic backups are enabled"
     echo
-    info "For help and documentation, visit:"
-    echo "  https://github.com/kedoupi/claude-code-kit"
+    echo -e "${BLUE}🚀 Next steps:${NC}"
+    echo "  1️⃣  Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)"
+    echo "  2️⃣  Test installation: claude --version"
+    echo "  3️⃣  Start chatting: claude \"Hello, Claude!\""
+    echo "  4️⃣  Manage providers: cc-config provider list"
+    echo
+    echo -e "${BLUE}📚 Need help?${NC}"
+    echo "  🌐 Documentation: https://github.com/kedoupi/claude-code-kit"
+    echo "  🐛 Report issues: https://github.com/kedoupi/claude-code-kit/issues"
+    echo "  💬 Get support: Read the docs/user-guide.md"
     echo
 }
 
