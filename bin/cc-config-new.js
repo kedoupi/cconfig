@@ -23,30 +23,30 @@ async function createApp() {
   // 设置帮助配置
   cli.configureHelp({
     sortSubcommands: true,
-    subcommandTerm: (cmd) => cmd.name() + (cmd.alias() ? `|${cmd.alias()}` : ''),
+    subcommandTerm: cmd => cmd.name() + (cmd.alias() ? `|${cmd.alias()}` : ''),
   });
 
   // 添加全局错误处理
-  cli.addErrorHandler((error) => {
+  cli.addErrorHandler(error => {
     handleError(error);
     process.exit(1);
   });
 
   // 注册服务商管理命令
   registerProviderCommands(cli);
-  
+
   // 注册别名管理命令
   registerAliasCommands(cli);
-  
+
   // 注册部署管理命令
   registerDeployCommands(cli);
-  
+
   // 注册向导命令
   registerWizardCommands(cli);
-  
+
   // 注册备份管理命令
   registerBackupCommands(cli);
-  
+
   // 注册系统命令
   registerSystemCommands(cli);
 
@@ -68,7 +68,7 @@ function registerProviderCommands(cli) {
     .option('--url <url>', 'API基础URL')
     .option('--key <key>', 'API密钥')
     .option('--timeout <timeout>', '请求超时时间(秒)', '30')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('info', 'Adding new provider...');
       await providerCommands.add(options);
     });
@@ -77,7 +77,7 @@ function registerProviderCommands(cli) {
     .command('list')
     .description('列出所有配置的服务商')
     .option('-d, --detail', '显示详细信息', false)
-    .action(async (options) => {
+    .action(async options => {
       cli.log('debug', 'Listing providers...');
       await providerCommands.list(options);
     });
@@ -110,7 +110,7 @@ function registerProviderCommands(cli) {
   providerCmd
     .command('stats')
     .description('显示服务商统计信息')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('debug', 'Getting provider stats...');
       await providerCommands.stats(options);
     });
@@ -118,8 +118,12 @@ function registerProviderCommands(cli) {
   providerCmd
     .command('wizard')
     .description('交互式服务商配置向导')
-    .option('-m, --mode <mode>', '配置模式 (template|quick|advanced)', 'template')
-    .action(async (options) => {
+    .option(
+      '-m, --mode <mode>',
+      '配置模式 (template|quick|advanced)',
+      'template'
+    )
+    .action(async options => {
       cli.log('info', 'Starting provider configuration wizard...');
       await wizardCommands.wizard(options);
     });
@@ -135,7 +139,7 @@ function registerAliasCommands(cli) {
     .command('generate')
     .description('生成Shell别名配置')
     .option('-o, --output <file>', '输出文件路径')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('info', 'Generating aliases...');
       await aliasCommands.generate(options);
     });
@@ -144,7 +148,7 @@ function registerAliasCommands(cli) {
     .command('install')
     .description('安装别名到Shell配置文件')
     .option('--shell <shell>', '指定Shell类型 (bash|zsh|fish)')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('info', 'Installing aliases to shell...');
       await aliasCommands.install(options);
     });
@@ -152,7 +156,7 @@ function registerAliasCommands(cli) {
   aliasCmd
     .command('uninstall')
     .description('从Shell配置文件中移除别名')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('info', 'Uninstalling aliases...');
       await aliasCommands.uninstall(options);
     });
@@ -160,7 +164,7 @@ function registerAliasCommands(cli) {
   aliasCmd
     .command('list')
     .description('列出所有可用别名')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('debug', 'Listing aliases...');
       await aliasCommands.list(options);
     });
@@ -168,7 +172,7 @@ function registerAliasCommands(cli) {
   aliasCmd
     .command('stats')
     .description('显示别名统计信息')
-    .action(async (options) => {
+    .action(async options => {
       cli.log('debug', 'Getting alias stats...');
       await aliasCommands.stats(options);
     });
@@ -187,7 +191,10 @@ function registerDeployCommands(cli) {
     .option('-o, --overwrite', '覆盖现有文件', false)
     .option('-t, --template <name>', '指定模板名称')
     .action(async (template, options) => {
-      cli.log('info', `Deploying template: ${template || options.template || 'default'}`);
+      cli.log(
+        'info',
+        `Deploying template: ${template || options.template || 'default'}`
+      );
       await deployCommands.deploy({
         template: template || options.template,
         force: options.force,
@@ -206,7 +213,7 @@ function registerDeployCommands(cli) {
   deployCmd
     .command('show <template>')
     .description('显示模板详情')
-    .action(async (template) => {
+    .action(async template => {
       cli.log('debug', `Showing template: ${template}`);
       await deployCommands.showTemplate(template);
     });
@@ -217,10 +224,15 @@ function registerDeployCommands(cli) {
  */
 function registerWizardCommands(cli) {
   // 独立的向导命令 (更方便的访问)
-  cli.command('wizard')
+  cli
+    .command('wizard')
     .description('🧙‍♂️ 启动配置向导')
-    .option('-m, --mode <mode>', '配置模式 (template|quick|advanced)', 'template')
-    .action(async (options) => {
+    .option(
+      '-m, --mode <mode>',
+      '配置模式 (template|quick|advanced)',
+      'template'
+    )
+    .action(async options => {
       cli.log('info', 'Starting configuration wizard...');
       await wizardCommands.wizard(options);
     });
@@ -235,7 +247,7 @@ function registerBackupCommands(cli) {
   backupCmd
     .command('create [description]')
     .description('创建配置备份')
-    .action(async (description) => {
+    .action(async description => {
       cli.log('info', 'Creating backup...');
       const ConfigManager = require('../src/core/ConfigManager');
       const configManager = new ConfigManager();
@@ -277,7 +289,7 @@ function registerBackupCommands(cli) {
   backupCmd
     .command('restore <timestamp>')
     .description('恢复指定备份')
-    .action(async (timestamp) => {
+    .action(async timestamp => {
       cli.log('info', `Restoring backup: ${timestamp}`);
       const ConfigManager = require('../src/core/ConfigManager');
       const configManager = new ConfigManager();
@@ -292,10 +304,11 @@ function registerBackupCommands(cli) {
  */
 function registerSystemCommands(cli) {
   // 初始化命令
-  cli.command('init')
+  cli
+    .command('init')
     .description('初始化配置目录和默认配置')
     .option('-f, --force', '强制重新初始化', false)
-    .action(async (options) => {
+    .action(async options => {
       cli.log('info', 'Initializing configuration...');
       const ConfigManager = require('../src/core/ConfigManager');
       const configManager = new ConfigManager();
@@ -312,28 +325,35 @@ function registerSystemCommands(cli) {
     });
 
   // 状态信息命令
-  cli.command('status')
+  cli
+    .command('status')
     .description('显示配置状态信息')
     .action(async () => {
       cli.log('debug', 'Getting system status...');
-      
+
       const ConfigManager = require('../src/core/ConfigManager');
       const configManager = new ConfigManager();
-      
+
       // 获取系统状态
       const cliStatus = await cli.getStatus();
       const paths = configManager.getPaths();
-      
+
       console.log('🔧 Claude Code Kit 状态信息\n');
       console.log(`版本: ${cli.version}`);
       console.log(`配置目录: ${cli.configDir}`);
-      console.log(`初始化状态: ${cliStatus.initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
-      
+      console.log(
+        `初始化状态: ${cliStatus.initialized ? '✅ 已初始化' : '❌ 未初始化'}`
+      );
+
       if (cliStatus.configDirSize !== undefined) {
-        console.log(`配置目录大小: ${(cliStatus.configDirSize / 1024).toFixed(2)} KB`);
-        console.log(`最后修改: ${cliStatus.configDirModified.toLocaleString()}`);
+        console.log(
+          `配置目录大小: ${(cliStatus.configDirSize / 1024).toFixed(2)} KB`
+        );
+        console.log(
+          `最后修改: ${cliStatus.configDirModified.toLocaleString()}`
+        );
       }
-      
+
       console.log('\n📁 目录结构:');
       console.log(`   配置: ${paths.configDir}`);
       console.log(`   服务商: ${paths.providersDir}`);
@@ -348,12 +368,12 @@ function registerSystemCommands(cli) {
         const providerManager = new ProviderManager();
         const providers = await providerManager.getProviders();
         const stats = await providerManager.getStats();
-        
+
         console.log('\n🌐 服务商配置:');
         console.log(`   总数: ${stats.total}`);
         console.log(`   启用: ${stats.enabled}`);
         console.log(`   禁用: ${stats.disabled}`);
-        
+
         if (stats.total > 0) {
           console.log('   列表:');
           Object.entries(providers).forEach(([name, config]) => {
@@ -381,7 +401,8 @@ function registerSystemCommands(cli) {
     });
 
   // 清理命令
-  cli.command('cleanup')
+  cli
+    .command('cleanup')
     .description('清理缓存和临时文件')
     .action(async () => {
       cli.log('info', 'Starting cleanup...');
@@ -395,7 +416,8 @@ function registerSystemCommands(cli) {
     });
 
   // 配置命令
-  cli.command('config')
+  cli
+    .command('config')
     .description('显示配置信息')
     .action(() => {
       const config = cli.getConfig();
@@ -416,16 +438,19 @@ function registerSystemCommands(cli) {
 async function main() {
   try {
     const cli = await createApp();
-    
+
     // 添加帮助信息
-    cli.addHelpText('after', `
+    cli.addHelpText(
+      'after',
+      `
 示例:
   $ cc-config wizard                    # 启动配置向导
   $ cc-config provider add              # 添加服务商
   $ cc-config alias install             # 安装别名到 Shell
   $ cc-config status                    # 查看状态信息
 
-更多信息请访问: https://github.com/kedoupi/claude-code-kit`);
+更多信息请访问: https://github.com/kedoupi/claude-code-kit`
+    );
 
     await cli.parseAsync(process.argv);
   } catch (error) {

@@ -25,11 +25,11 @@ class ProviderCommandsEnhanced {
       if (options.file) {
         return await this.importFromFile(options.file, options);
       }
-      
+
       if (options.batch) {
         return await this.batchAdd(options);
       }
-      
+
       return await this.addSingle(options);
     } catch (error) {
       handleError(error);
@@ -58,7 +58,7 @@ class ProviderCommandsEnhanced {
           if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(input)) {
             return '标识只能包含字母、数字、下划线和连字符，且必须以字母开头';
           }
-          
+
           // 检查是否已存在
           try {
             await providerManager.getProvider(input);
@@ -192,19 +192,19 @@ class ProviderCommandsEnhanced {
 
     while (addMore) {
       console.log(chalk.cyan(`\n📝 配置第 ${providers.length + 1} 个服务商:`));
-      
+
       const provider = await inquirer.prompt([
         {
           type: 'input',
           name: 'name',
           message: '服务商标识:',
-          validate: input => input.trim() ? true : '请输入服务商标识',
+          validate: input => (input.trim() ? true : '请输入服务商标识'),
         },
         {
           type: 'input',
           name: 'alias',
           message: '别名:',
-          validate: input => input.trim() ? true : '请输入别名',
+          validate: input => (input.trim() ? true : '请输入别名'),
         },
         {
           type: 'input',
@@ -223,7 +223,8 @@ class ProviderCommandsEnhanced {
           type: 'password',
           name: 'apiKey',
           message: 'API 密钥:',
-          validate: input => input.length >= 10 ? true : 'API密钥长度至少10个字符',
+          validate: input =>
+            input.length >= 10 ? true : 'API密钥长度至少10个字符',
         },
       ]);
 
@@ -281,7 +282,11 @@ class ProviderCommandsEnhanced {
         results.push({ name: provider.name, success: true });
         handleSuccess(`服务商 "${provider.name}" 添加成功`);
       } catch (error) {
-        results.push({ name: provider.name, success: false, error: error.message });
+        results.push({
+          name: provider.name,
+          success: false,
+          error: error.message,
+        });
         handleError(`服务商 "${provider.name}" 添加失败: ${error.message}`);
       }
     }
@@ -289,7 +294,7 @@ class ProviderCommandsEnhanced {
     // 显示结果汇总
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
-    
+
     console.log(chalk.blue(`\n📊 批量添加结果:`));
     console.log(`成功: ${successful}`);
     console.log(`失败: ${failed}`);
@@ -315,7 +320,7 @@ class ProviderCommandsEnhanced {
 
     try {
       const data = await fs.readJson(filePath);
-      
+
       if (!Array.isArray(data) && typeof data === 'object') {
         // 单个配置对象，转换为数组
         const singleData = data;
@@ -345,7 +350,7 @@ class ProviderCommandsEnhanced {
       if (errors.length > 0) {
         console.log(chalk.red('❌ 配置验证错误:'));
         errors.forEach(error => console.log(`  - ${error}`));
-        
+
         if (validConfigs.length === 0) {
           throw new Error('没有有效的配置可以导入');
         }
@@ -380,7 +385,11 @@ class ProviderCommandsEnhanced {
           results.push({ name: config.name, success: true });
           handleSuccess(`导入服务商 "${config.name}" 成功`);
         } catch (error) {
-          results.push({ name: config.name, success: false, error: error.message });
+          results.push({
+            name: config.name,
+            success: false,
+            error: error.message,
+          });
           handleError(`导入服务商 "${config.name}" 失败: ${error.message}`);
         }
       }
@@ -388,7 +397,7 @@ class ProviderCommandsEnhanced {
       // 显示导入结果
       const successful = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
-      
+
       console.log(chalk.blue(`\n📊 导入结果:`));
       console.log(`成功: ${successful}`);
       console.log(`失败: ${failed}`);
@@ -400,7 +409,6 @@ class ProviderCommandsEnhanced {
         await aliasGenerator.generateAliases();
         handleInfo('别名配置已更新');
       }
-
     } catch (error) {
       throw new Error(`文件导入失败: ${error.message}`);
     }
@@ -414,7 +422,7 @@ class ProviderCommandsEnhanced {
       console.log(chalk.blue('📤 导出服务商配置\n'));
 
       const providers = await providerManager.getProviders();
-      
+
       if (Object.keys(providers).length === 0) {
         console.log(chalk.yellow('📝 暂无服务商配置可导出'));
         return;
@@ -422,7 +430,7 @@ class ProviderCommandsEnhanced {
 
       // 选择导出的服务商
       let selectedProviders = providers;
-      
+
       if (!options.all) {
         const choices = Object.keys(providers).map(name => ({
           name: `${name} (${providers[name].alias})`,
@@ -436,7 +444,7 @@ class ProviderCommandsEnhanced {
             name: 'selected',
             message: '选择要导出的服务商:',
             choices,
-            validate: input => input.length > 0 ? true : '至少选择一个服务商',
+            validate: input => (input.length > 0 ? true : '至少选择一个服务商'),
           },
         ]);
 
@@ -447,29 +455,31 @@ class ProviderCommandsEnhanced {
       }
 
       // 处理敏感数据
-      const exportData = Object.entries(selectedProviders).map(([name, config]) => ({
-        name,
-        alias: config.alias,
-        baseURL: config.baseURL,
-        apiKey: options.includeSensitive ? config.apiKey : '[REDACTED]',
-        timeout: config.timeout / 1000, // 转换回秒
-        description: config.description,
-        enabled: config.enabled,
-      }));
+      const exportData = Object.entries(selectedProviders).map(
+        ([name, config]) => ({
+          name,
+          alias: config.alias,
+          baseURL: config.baseURL,
+          apiKey: options.includeSensitive ? config.apiKey : '[REDACTED]',
+          timeout: config.timeout / 1000, // 转换回秒
+          description: config.description,
+          enabled: config.enabled,
+        })
+      );
 
       // 确定输出路径
-      const outputPath = options.output || `providers-export-${Date.now()}.json`;
-      
+      const outputPath =
+        options.output || `providers-export-${Date.now()}.json`;
+
       // 写入文件
       await fs.writeJson(outputPath, exportData, { spaces: 2 });
-      
+
       handleSuccess(`配置已导出到: ${outputPath}`);
       console.log(chalk.info(`导出了 ${exportData.length} 个服务商配置`));
-      
+
       if (!options.includeSensitive) {
         handleWarning('API密钥已脱敏，导入时需要重新设置');
       }
-
     } catch (error) {
       handleError(error);
     }
@@ -483,7 +493,7 @@ class ProviderCommandsEnhanced {
 
     try {
       const headers = {
-        'Authorization': `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
         'User-Agent': 'Claude-Code-Kit/1.0.0',
       };
 
@@ -491,7 +501,7 @@ class ProviderCommandsEnhanced {
       const response = await axios.get(config.baseURL, {
         headers,
         timeout: config.timeout || 30000,
-        validateStatus: (status) => status < 500, // 允许 4xx 状态码
+        validateStatus: status => status < 500, // 允许 4xx 状态码
       });
 
       if (response.status < 400) {
@@ -499,12 +509,15 @@ class ProviderCommandsEnhanced {
         return { success: true, status: response.status };
       } else {
         handleWarning(`API 可达但返回 ${response.status} 状态码`);
-        return { success: false, status: response.status, message: 'HTTP error' };
+        return {
+          success: false,
+          status: response.status,
+          message: 'HTTP error',
+        };
       }
-
     } catch (error) {
       let message = '连接测试失败';
-      
+
       if (error.code === 'ENOTFOUND') {
         message = '域名无法解析';
       } else if (error.code === 'ECONNREFUSED') {
@@ -575,7 +588,9 @@ class ProviderCommandsEnhanced {
         const result = await aliasGenerator.updateShellConfig();
         if (result.updated) {
           handleSuccess(result.message);
-          handleInfo('请重新加载Shell配置: source ~/.zshrc 或 source ~/.bashrc');
+          handleInfo(
+            '请重新加载Shell配置: source ~/.zshrc 或 source ~/.bashrc'
+          );
         } else {
           handleInfo(result.message);
         }
@@ -590,7 +605,7 @@ class ProviderCommandsEnhanced {
    */
   static validateImportConfig(config) {
     const required = ['name', 'alias', 'baseURL', 'apiKey'];
-    
+
     for (const field of required) {
       if (!config[field]) {
         throw new Error(`缺少必要字段: ${field}`);

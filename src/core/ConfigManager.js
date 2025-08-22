@@ -276,10 +276,10 @@ class ConfigManager {
       const key = this.getEncryptionKey(); // 已经是 32 字节的 Buffer
       const iv = crypto.randomBytes(16); // 16 字节初始化向量
       const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-      
+
       let encrypted = cipher.update(apiKey, 'utf8', 'hex');
       encrypted += cipher.final('hex');
-      
+
       // 格式: iv:encryptedData
       const result = `${iv.toString('hex')}:${encrypted}`;
       return 'enc:' + result;
@@ -299,19 +299,19 @@ class ConfigManager {
     try {
       const encryptedData = encryptedKey.substring(4);
       const [ivHex, encrypted] = encryptedData.split(':');
-      
+
       if (!ivHex || !encrypted) {
         throw new Error('无效的加密数据格式');
       }
-      
+
       const key = this.getEncryptionKey(); // 已经是 Buffer
       const iv = Buffer.from(ivHex, 'hex');
-      
+
       const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-      
+
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
-      
+
       return decrypted;
     } catch (error) {
       throw new Error(`API密钥解密失败: ${error.message}`);
@@ -323,10 +323,7 @@ class ConfigManager {
    */
   getEncryptionKey() {
     const machineId = os.hostname() + os.userInfo().username;
-    return crypto
-      .createHash('sha256')
-      .update(machineId)
-      .digest(); // 直接返回 Buffer，32 字节用于 AES-256
+    return crypto.createHash('sha256').update(machineId).digest(); // 直接返回 Buffer，32 字节用于 AES-256
   }
 
   /**

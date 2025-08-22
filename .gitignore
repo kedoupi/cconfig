@@ -43,3 +43,10 @@ test-config/
 dist/
 build/
 *.tgz
+
+# Claude Code Kit specific
+user-configs/
+backup-configs/
+.claude-config-backup/
+aliases.sh.backup
+*.config.backup

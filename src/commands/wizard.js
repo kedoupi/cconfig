@@ -3,7 +3,12 @@ const chalk = require('chalk');
 const axios = require('axios');
 const ProviderManager = require('../core/ProviderManager');
 const AliasGenerator = require('../core/AliasGenerator');
-const { handleError, handleSuccess, handleInfo, handleWarning } = require('../utils/errorHandler');
+const {
+  handleError,
+  handleSuccess,
+  handleInfo,
+  handleWarning,
+} = require('../utils/errorHandler');
 
 const providerManager = new ProviderManager();
 
@@ -51,13 +56,17 @@ const PROVIDER_TEMPLATES = {
 async function wizard(options = {}) {
   try {
     console.log(chalk.blue('🧙‍♂️ Claude Code 服务商配置向导\n'));
-    
+
     // 显示欢迎信息
-    console.log(chalk.gray('此向导将帮助您配置 AI 服务商，包括 API 密钥验证和连接测试。\n'));
+    console.log(
+      chalk.gray(
+        '此向导将帮助您配置 AI 服务商，包括 API 密钥验证和连接测试。\n'
+      )
+    );
 
     // 选择配置模式
     const mode = await selectConfigurationMode(options);
-    
+
     if (mode === 'quick') {
       await quickSetup(options);
     } else if (mode === 'advanced') {
@@ -65,7 +74,6 @@ async function wizard(options = {}) {
     } else if (mode === 'template') {
       await templateSetup(options);
     }
-
   } catch (error) {
     handleError(error);
   }
@@ -111,10 +119,12 @@ async function selectConfigurationMode(options) {
 async function templateSetup(options) {
   console.log(chalk.blue('📋 选择服务商模板\n'));
 
-  const templateChoices = Object.entries(PROVIDER_TEMPLATES).map(([key, template]) => ({
-    name: `${template.name} - ${template.description}`,
-    value: key,
-  }));
+  const templateChoices = Object.entries(PROVIDER_TEMPLATES).map(
+    ([key, template]) => ({
+      name: `${template.name} - ${template.description}`,
+      value: key,
+    })
+  );
 
   const { templateKey } = await inquirer.prompt([
     {
@@ -126,7 +136,7 @@ async function templateSetup(options) {
   ]);
 
   const template = PROVIDER_TEMPLATES[templateKey];
-  
+
   // 显示模板信息
   console.log(chalk.yellow('\n📄 模板信息:'));
   console.log(`  名称: ${template.name}`);
@@ -136,9 +146,12 @@ async function templateSetup(options) {
 
   // 配置必要字段
   const config = await configureFromTemplate(template, options);
-  
+
   // 验证配置
-  await validateAndSaveConfig(template.name.toLowerCase().replace(/\s+/g, '-'), config);
+  await validateAndSaveConfig(
+    template.name.toLowerCase().replace(/\s+/g, '-'),
+    config
+  );
 }
 
 /**
@@ -215,7 +228,7 @@ async function quickSetup(options) {
       type: 'input',
       name: 'alias',
       message: '命令别名:',
-      default: (answers) => answers.name.toLowerCase().replace(/\s+/g, ''),
+      default: answers => answers.name.toLowerCase().replace(/\s+/g, ''),
       validate: validateAlias,
     },
     {
@@ -286,7 +299,7 @@ async function advancedSetup(options) {
       type: 'input',
       name: 'description',
       message: '描述信息:',
-      default: (answers) => `${answers.name} API 服务`,
+      default: answers => `${answers.name} API 服务`,
     },
     {
       type: 'input',
@@ -341,13 +354,13 @@ async function configureCustomHeaders() {
         type: 'input',
         name: 'headerName',
         message: '请求头名称:',
-        validate: (input) => input.trim() ? true : '请输入请求头名称',
+        validate: input => (input.trim() ? true : '请输入请求头名称'),
       },
       {
         type: 'input',
         name: 'headerValue',
         message: '请求头值:',
-        validate: (input) => input.trim() ? true : '请输入请求头值',
+        validate: input => (input.trim() ? true : '请输入请求头值'),
       },
     ]);
 
@@ -427,7 +440,6 @@ async function validateAndSaveConfig(name, config) {
 
     // 显示使用提示
     showUsageInstructions(config.alias);
-
   } catch (error) {
     handleError(error, '保存配置失败');
   }
@@ -441,25 +453,26 @@ async function testApiConnection(config) {
 
   try {
     const headers = {
-      'Authorization': `Bearer ${config.apiKey}`,
+      Authorization: `Bearer ${config.apiKey}`,
       'User-Agent': 'Claude-Code-Kit/1.0.0',
       ...config.headers,
     };
 
     const testUrl = `${config.baseURL}${config.testEndpoint || '/'}`;
-    
+
     const response = await axios.get(testUrl, {
       headers,
-      timeout: (config.timeout || 30000),
-      validateStatus: (status) => status < 500, // 允许 4xx 状态码，主要是检查连接
+      timeout: config.timeout || 30000,
+      validateStatus: status => status < 500, // 允许 4xx 状态码，主要是检查连接
     });
 
     if (response.status < 400) {
       handleSuccess('API 连接测试通过');
     } else if (response.status < 500) {
-      handleWarning(`API 可达但返回 ${response.status} 状态码 - 请检查端点或密钥`);
+      handleWarning(
+        `API 可达但返回 ${response.status} 状态码 - 请检查端点或密钥`
+      );
     }
-
   } catch (error) {
     if (error.code === 'ENOTFOUND') {
       handleWarning('域名无法解析 - 请检查 URL 是否正确');
@@ -470,7 +483,7 @@ async function testApiConnection(config) {
     } else {
       handleWarning(`连接测试失败: ${error.message}`);
     }
-    
+
     const { continueAnyway } = await inquirer.prompt([
       {
         type: 'confirm',
@@ -548,13 +561,13 @@ async function validateAlias(input) {
   if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(input)) {
     return '别名只能包含字母、数字、下划线和连字符，且必须以字母开头';
   }
-  
+
   const isAvailable = await providerManager.isAliasAvailable(input);
   if (!isAvailable) {
     const suggested = await providerManager.suggestAlias(input);
     return `别名 "${input}" 已被使用，建议使用: ${suggested}`;
   }
-  
+
   return true;
 }
 

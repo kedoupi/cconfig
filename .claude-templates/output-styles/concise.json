@@ -1,0 +1,50 @@
+{
+  "name": "concise",
+  "displayName": "简洁模式",
+  "description": "简洁直接的输出风格，适合快速开发",
+  "version": "1.0.0",
+  "style": {
+    "verbosity": "minimal",
+    "codeComments": false,
+    "explanations": false,
+    "examples": false,
+    "stepByStep": false
+  },
+  "formatting": {
+    "useEmojis": false,
+    "useBold": false,
+    "useColors": true,
+    "maxLineLength": 80,
+    "indentSize": 2
+  },
+  "responses": {
+    "confirmationRequired": false,
+    "showProgress": false,
+    "includeContext": false,
+    "suggestNextSteps": false
+  },
+  "codeGeneration": {
+    "includeComments": false,
+    "includeTypeHints": true,
+    "includeErrorHandling": true,
+    "includeLogging": false,
+    "optimizeForReadability": false
+  },
+  "prompts": {
+    "systemPrompt": "请用最简洁的方式回复，直接给出解决方案，避免冗余说明。",
+    "codePrompt": "只提供核心代码，不要添加注释和说明。",
+    "explanationPrompt": "用一句话概括要点。"
+  },
+  "templates": {
+    "codeBlock": "```{language}\n{code}\n```",
+    "errorMessage": "错误：{message}",
+    "successMessage": "完成：{message}",
+    "warningMessage": "注意：{message}"
+  },
+  "filters": {
+    "removeMarkdownHeaders": false,
+    "removeCodeComments": true,
+    "removeEmptyLines": true,
+    "removeVerboseExplanations": true
+  }
+}

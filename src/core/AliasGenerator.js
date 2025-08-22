@@ -22,8 +22,10 @@ class AliasGenerator {
   async generateAliases() {
     try {
       await this.configStorage.initialize();
-      const providers = await this.configStorage.listProviders({ includeMetadata: false });
-      
+      const providers = await this.configStorage.listProviders({
+        includeMetadata: false,
+      });
+
       const enabledProviders = Object.entries(providers).filter(
         ([_, config]) => config.enabled
       );
@@ -53,16 +55,16 @@ class AliasGenerator {
    * 生成脚本头部注释
    */
   generateHeader() {
-    const timestamp = new Date().toLocaleString('zh-CN', { 
+    const timestamp = new Date().toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
     });
-    
+
     return `#!/bin/bash
 # Claude Code Kit - 自动生成的别名配置
 # 此文件由 cc-config 自动生成，请勿手动编辑
@@ -186,22 +188,20 @@ _cc_reload_aliases() {
 
       aliases.push(`# ${description}`);
       aliases.push(`# 服务商: ${name} | 别名: ${safeAlias}`);
-      
+
       // 主要命令别名
       aliases.push(
         `alias ${safeAlias}='_cc_load_config "${name}" && claude "\$@"'`
       );
-      
+
       // 信息查看别名
       aliases.push(
         `alias ${safeAlias}-info='_cc_load_config "${name}" && _cc_show_config "${name}"'`
       );
-      
+
       // 连接测试别名
-      aliases.push(
-        `alias ${safeAlias}-test='_cc_test_config "${name}"'`
-      );
-      
+      aliases.push(`alias ${safeAlias}-test='_cc_test_config "${name}"'`);
+
       aliases.push('');
     }
 
@@ -209,7 +209,9 @@ _cc_reload_aliases() {
     aliases.push('# 管理命令别名');
     aliases.push('# ===========================================');
     aliases.push('alias cc-providers="cc-config provider list"');
-    aliases.push('alias cc-providers-detail="cc-config provider list --detail"');
+    aliases.push(
+      'alias cc-providers-detail="cc-config provider list --detail"'
+    );
     aliases.push('alias cc-add="cc-config provider add"');
     aliases.push('alias cc-edit="cc-config provider edit"');
     aliases.push('alias cc-remove="cc-config provider remove"');
@@ -218,12 +220,16 @@ _cc_reload_aliases() {
     aliases.push('alias cc-reload="_cc_reload_aliases"');
     aliases.push('alias cc-shell="cc-config provider install-shell"');
     aliases.push('');
-    
+
     aliases.push('# ===========================================');
     aliases.push('# 便捷功能别名');
     aliases.push('# ===========================================');
-    aliases.push('alias cc-which="echo \\"当前活跃的服务商: $CC_PROVIDER_ALIAS\\""');
-    aliases.push('alias cc-help="echo \\"可用命令: cc-providers, cc-add, cc-edit, cc-remove, cc-test, cc-stats, cc-reload\\""');
+    aliases.push(
+      'alias cc-which="echo \\"当前活跃的服务商: $CC_PROVIDER_ALIAS\\""'
+    );
+    aliases.push(
+      'alias cc-help="echo \\"可用命令: cc-providers, cc-add, cc-edit, cc-remove, cc-test, cc-stats, cc-reload\\""'
+    );
 
     return aliases.join('\n');
   }
@@ -234,7 +240,7 @@ _cc_reload_aliases() {
   generateEmptyScript() {
     const header = this.generateHeader();
     const footer = this.generateFooter();
-    
+
     return [
       header,
       '',
@@ -244,7 +250,7 @@ _cc_reload_aliases() {
       'echo "⚠️  暂无可用的服务商别名"',
       'echo "💡 请运行 \\"cc-config provider add\\" 添加服务商配置"',
       '',
-      footer
+      footer,
     ].join('\n');
   }
 
@@ -279,11 +285,11 @@ fi`;
     try {
       // 确保目录存在
       await fs.ensureDir(path.dirname(this.aliasesFile));
-      
+
       // 写入文件
       await fs.writeFile(this.aliasesFile, content, 'utf8');
       await fs.chmod(this.aliasesFile, 0o755); // 可执行权限
-      
+
       return true;
     } catch (error) {
       throw new Error(`写入别名文件失败: ${error.message}`);
@@ -320,13 +326,13 @@ fi`;
    */
   getAllShellConfigFiles() {
     const files = [];
-    
+
     for (const [shell, filePath] of Object.entries(this.profileFiles)) {
       if (fs.existsSync(filePath)) {
         files.push({ shell, filePath });
       }
     }
-    
+
     return files;
   }
 
@@ -341,12 +347,16 @@ fi`;
       if (allShells) {
         // 更新所有发现的 Shell 配置文件
         const allFiles = this.getAllShellConfigFiles();
-        
+
         for (const { shell, filePath } of allFiles) {
-          const result = await this.updateSingleShellConfig(shell, filePath, force);
+          const result = await this.updateSingleShellConfig(
+            shell,
+            filePath,
+            force
+          );
           results.push({ shell, ...result });
         }
-        
+
         return {
           updated: results.some(r => r.updated),
           results,
@@ -356,8 +366,12 @@ fi`;
         // 只更新当前 Shell
         const shell = this.detectShell();
         const configFile = this.getShellConfigFile(shell);
-        const result = await this.updateSingleShellConfig(shell, configFile, force);
-        
+        const result = await this.updateSingleShellConfig(
+          shell,
+          configFile,
+          force
+        );
+
         return {
           shell,
           configFile,
@@ -384,13 +398,14 @@ fi`;
 
       // 检查是否已经添加了 source 命令
       const marker = '# Claude Code Kit 别名配置';
-      const hasExisting = content.includes(marker) || content.includes(this.sourceCommand);
+      const hasExisting =
+        content.includes(marker) || content.includes(this.sourceCommand);
 
       if (hasExisting && !force) {
-        return { 
-          updated: false, 
+        return {
+          updated: false,
           message: `${shell} 配置已存在`,
-          filePath: configFile 
+          filePath: configFile,
         };
       }
 
@@ -398,9 +413,8 @@ fi`;
       let newContent = content;
       if (hasExisting) {
         const lines = content.split('\n');
-        const filteredLines = lines.filter(line => 
-          !line.includes(this.sourceCommand) && 
-          !line.includes(marker)
+        const filteredLines = lines.filter(
+          line => !line.includes(this.sourceCommand) && !line.includes(marker)
         );
         newContent = filteredLines.join('\n');
       }
@@ -437,12 +451,12 @@ ${this.sourceCommand}
       if (allShells) {
         // 从所有发现的 Shell 配置文件中移除
         const allFiles = this.getAllShellConfigFiles();
-        
+
         for (const { shell, filePath } of allFiles) {
           const result = await this.removeSingleShellConfig(shell, filePath);
           results.push({ shell, ...result });
         }
-        
+
         return {
           removed: results.some(r => r.removed),
           results,
@@ -453,7 +467,7 @@ ${this.sourceCommand}
         const shell = this.detectShell();
         const configFile = this.getShellConfigFile(shell);
         const result = await this.removeSingleShellConfig(shell, configFile);
-        
+
         return {
           shell,
           configFile,
@@ -471,10 +485,10 @@ ${this.sourceCommand}
   async removeSingleShellConfig(shell, configFile) {
     try {
       if (!(await fs.pathExists(configFile))) {
-        return { 
-          removed: false, 
+        return {
+          removed: false,
           message: `${shell} 配置文件不存在`,
-          filePath: configFile 
+          filePath: configFile,
         };
       }
 
@@ -483,22 +497,25 @@ ${this.sourceCommand}
 
       // 移除相关行
       const lines = content.split('\n');
-      const filteredLines = lines.filter(line =>
-        !line.includes(this.sourceCommand) &&
-        !line.includes('Claude Code Kit 别名配置') &&
-        !line.includes('# 自动生成于:')
+      const filteredLines = lines.filter(
+        line =>
+          !line.includes(this.sourceCommand) &&
+          !line.includes('Claude Code Kit 别名配置') &&
+          !line.includes('# 自动生成于:')
       );
 
       if (filteredLines.length === lines.length) {
-        return { 
-          removed: false, 
+        return {
+          removed: false,
           message: `${shell} 配置中未找到相关配置`,
-          filePath: configFile 
+          filePath: configFile,
         };
       }
 
       // 清理多余的空行
-      const cleanedContent = filteredLines.join('\n').replace(/\n{3,}/g, '\n\n');
+      const cleanedContent = filteredLines
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n');
       await fs.writeFile(configFile, cleanedContent, 'utf8');
 
       return {
@@ -517,11 +534,15 @@ ${this.sourceCommand}
   async validateAliases() {
     try {
       await this.configStorage.initialize();
-      const providers = await this.configStorage.listProviders({ includeMetadata: false });
+      const providers = await this.configStorage.listProviders({
+        includeMetadata: false,
+      });
       const issues = [];
 
       // 检查是否有重复的别名
-      const aliases = Object.values(providers).map(p => p.alias).filter(Boolean);
+      const aliases = Object.values(providers)
+        .map(p => p.alias)
+        .filter(Boolean);
       const duplicates = aliases.filter(
         (alias, index) => aliases.indexOf(alias) !== index
       );
@@ -536,9 +557,30 @@ ${this.sourceCommand}
 
       // 检查别名是否与系统命令冲突
       const systemCommands = [
-        'ls', 'cd', 'pwd', 'echo', 'cat', 'grep', 'find', 'git',
-        'cp', 'mv', 'rm', 'mkdir', 'chmod', 'chown', 'ps', 'kill',
-        'curl', 'wget', 'ssh', 'scp', 'rsync', 'tar', 'zip', 'unzip'
+        'ls',
+        'cd',
+        'pwd',
+        'echo',
+        'cat',
+        'grep',
+        'find',
+        'git',
+        'cp',
+        'mv',
+        'rm',
+        'mkdir',
+        'chmod',
+        'chown',
+        'ps',
+        'kill',
+        'curl',
+        'wget',
+        'ssh',
+        'scp',
+        'rsync',
+        'tar',
+        'zip',
+        'unzip',
       ];
       const conflicts = aliases.filter(alias => systemCommands.includes(alias));
 
@@ -551,8 +593,8 @@ ${this.sourceCommand}
       }
 
       // 检查别名格式是否有效
-      const invalidAliases = aliases.filter(alias => 
-        !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(alias)
+      const invalidAliases = aliases.filter(
+        alias => !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(alias)
       );
 
       if (invalidAliases.length > 0) {
@@ -575,7 +617,7 @@ ${this.sourceCommand}
       // 检查 Shell 配置是否已安装
       const shell = this.detectShell();
       const configFile = this.getShellConfigFile(shell);
-      
+
       if (await fs.pathExists(configFile)) {
         const content = await fs.readFile(configFile, 'utf8');
         if (!content.includes(this.sourceCommand)) {
@@ -615,7 +657,9 @@ ${this.sourceCommand}
   async getAliasStats() {
     try {
       await this.configStorage.initialize();
-      const providers = await this.configStorage.listProviders({ includeMetadata: true });
+      const providers = await this.configStorage.listProviders({
+        includeMetadata: true,
+      });
       const validation = await this.validateAliases();
 
       const aliases = Object.values(providers).map(p => ({
@@ -636,7 +680,8 @@ ${this.sourceCommand}
           valid: validation.valid,
           issueCount: validation.issues.length,
           errors: validation.issues.filter(i => i.severity === 'error').length,
-          warnings: validation.issues.filter(i => i.severity === 'warning').length,
+          warnings: validation.issues.filter(i => i.severity === 'warning')
+            .length,
         },
         shell: {
           current: this.detectShell(),
@@ -729,8 +774,10 @@ ${this.sourceCommand}
       }
 
       const currentShell = this.detectShell();
-      const currentShellConfig = status.shells.find(s => s.shell === currentShell);
-      
+      const currentShellConfig = status.shells.find(
+        s => s.shell === currentShell
+      );
+
       if (currentShellConfig && !currentShellConfig.configured) {
         status.recommendations.push({
           type: 'install_shell',

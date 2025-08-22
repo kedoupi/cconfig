@@ -13,7 +13,9 @@ class ProviderManager {
       // 确保配置目录存在
       await this.configStorage.initialize();
 
-      const providers = await this.configStorage.listProviders({ includeMetadata: false });
+      const providers = await this.configStorage.listProviders({
+        includeMetadata: false,
+      });
 
       if (providers[name]) {
         throw new Error(`服务商 "${name}" 已存在`);
@@ -64,7 +66,9 @@ class ProviderManager {
   async updateProvider(name, updates) {
     try {
       await this.configStorage.initialize();
-      const providers = await this.configStorage.listProviders({ includeMetadata: false });
+      const providers = await this.configStorage.listProviders({
+        includeMetadata: false,
+      });
 
       if (!providers[name]) {
         throw new Error(`服务商 "${name}" 不存在`);
@@ -102,7 +106,9 @@ class ProviderManager {
   async removeProvider(name) {
     try {
       await this.configStorage.initialize();
-      const providers = await this.configStorage.listProviders({ includeMetadata: false });
+      const providers = await this.configStorage.listProviders({
+        includeMetadata: false,
+      });
 
       if (!providers[name]) {
         throw new Error(`服务商 "${name}" 不存在`);
@@ -259,7 +265,7 @@ class ProviderManager {
   async exportConfig(name = null, options = {}) {
     try {
       await this.configStorage.initialize();
-      
+
       if (name) {
         const provider = await this.configStorage.readProvider(name);
         return { [name]: provider };
@@ -279,17 +285,19 @@ class ProviderManager {
   async importConfig(configData, options = {}) {
     try {
       await this.configStorage.initialize();
-      
+
       // 使用 ConfigStorage 的批量导入功能
       const result = await this.configStorage.batchImport(configData, options);
-      
+
       return {
         imported: result.results.filter(r => r.success).map(r => r.name),
         skipped: [], // ConfigStorage 处理跳过逻辑
-        errors: result.results.filter(r => !r.success).map(r => ({ 
-          name: r.name, 
-          error: r.error 
-        })),
+        errors: result.results
+          .filter(r => !r.success)
+          .map(r => ({
+            name: r.name,
+            error: r.error,
+          })),
         total: result.results.length,
         successful: result.successful,
         failed: result.failed,

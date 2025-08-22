@@ -14,15 +14,15 @@ class ConfigStorage {
     this.providersDir = path.join(this.baseDir, 'providers');
     this.schemasDir = path.join(this.baseDir, 'schemas');
     this.metadataFile = path.join(this.baseDir, 'metadata.json');
-    
+
     // 配置文件权限
-    this.dirMode = 0o700;  // 仅用户可读写执行
+    this.dirMode = 0o700; // 仅用户可读写执行
     this.fileMode = 0o600; // 仅用户可读写
-    
+
     // 支持的配置格式版本
     this.currentVersion = '1.0.0';
     this.supportedVersions = ['1.0.0'];
-    
+
     // 初始化状态
     this.initialized = false;
   }
@@ -36,15 +36,14 @@ class ConfigStorage {
     try {
       // 创建必要的目录
       await this.ensureDirectories();
-      
+
       // 初始化元数据文件
       await this.initializeMetadata();
-      
+
       // 初始化配置模式
       await this.initializeSchemas();
-      
+
       this.initialized = true;
-      
     } catch (error) {
       throw new Error(`配置存储初始化失败: ${error.message}`);
     }
@@ -54,11 +53,7 @@ class ConfigStorage {
    * 确保必要的目录存在
    */
   async ensureDirectories() {
-    const directories = [
-      this.baseDir,
-      this.providersDir,
-      this.schemasDir,
-    ];
+    const directories = [this.baseDir, this.providersDir, this.schemasDir];
 
     for (const dir of directories) {
       await fs.ensureDir(dir);
@@ -188,24 +183,24 @@ class ConfigStorage {
    */
   async readProvider(name) {
     await this.initialize();
-    
+
     try {
       const filePath = path.join(this.providersDir, `${name}.json`);
-      
+
       if (!(await fs.pathExists(filePath))) {
         throw new Error(`服务商 "${name}" 不存在`);
       }
 
       const data = await fs.readJson(filePath);
-      
+
       // 验证配置格式
       await this.validateProviderConfig(data);
-      
+
       // 解密 API 密钥
       if (data.apiKey && data.apiKey.startsWith('enc:')) {
         data.apiKey = this.decryptApiKey(data.apiKey);
       }
-      
+
       return data;
     } catch (error) {
       throw new Error(`读取服务商配置失败: ${error.message}`);
@@ -217,11 +212,11 @@ class ConfigStorage {
    */
   async writeProvider(name, config) {
     await this.initialize();
-    
+
     try {
       // 验证配置格式
       await this.validateProviderConfig(config);
-      
+
       // 准备配置数据
       const configToSave = {
         ...config,
@@ -232,23 +227,23 @@ class ConfigStorage {
           source: config.metadata?.source || 'manual',
         },
       };
-      
+
       // 加密 API 密钥
       if (configToSave.apiKey && !configToSave.apiKey.startsWith('enc:')) {
         configToSave.apiKey = this.encryptApiKey(configToSave.apiKey);
       }
-      
+
       const filePath = path.join(this.providersDir, `${name}.json`);
-      
+
       // 原子性写入：先写临时文件，然后重命名
       const tempPath = `${filePath}.tmp`;
       await fs.writeJson(tempPath, configToSave, { spaces: 2 });
       await fs.chmod(tempPath, this.fileMode);
       await fs.move(tempPath, filePath);
-      
+
       // 更新元数据
       await this.updateConfigCount();
-      
+
       return true;
     } catch (error) {
       throw new Error(`写入服务商配置失败: ${error.message}`);
@@ -260,29 +255,29 @@ class ConfigStorage {
    */
   async removeProvider(name) {
     await this.initialize();
-    
+
     try {
       const filePath = path.join(this.providersDir, `${name}.json`);
-      
+
       if (!(await fs.pathExists(filePath))) {
         return false;
       }
-      
+
       // 创建备份
       const backupPath = path.join(
-        this.baseDir, 
-        'backups', 
+        this.baseDir,
+        'backups',
         `${name}-${Date.now()}.json.bak`
       );
       await fs.ensureDir(path.dirname(backupPath));
       await fs.copy(filePath, backupPath);
-      
+
       // 删除配置文件
       await fs.remove(filePath);
-      
+
       // 更新元数据
       await this.updateConfigCount();
-      
+
       return true;
     } catch (error) {
       throw new Error(`删除服务商配置失败: ${error.message}`);
@@ -294,15 +289,15 @@ class ConfigStorage {
    */
   async listProviders(options = {}) {
     await this.initialize();
-    
+
     try {
       const providers = {};
       const files = await fs.readdir(this.providersDir);
-      
+
       for (const file of files) {
         if (file.endsWith('.json') && !file.startsWith('.')) {
           const name = path.basename(file, '.json');
-          
+
           try {
             if (options.includeMetadata) {
               providers[name] = await this.readProvider(name);
@@ -321,11 +316,13 @@ class ConfigStorage {
             }
           } catch (error) {
             // 记录错误但继续处理其他配置
-            console.warn(chalk.yellow(`警告: 无法读取配置 ${name}: ${error.message}`));
+            console.warn(
+              chalk.yellow(`警告: 无法读取配置 ${name}: ${error.message}`)
+            );
           }
         }
       }
-      
+
       return providers;
     } catch (error) {
       throw new Error(`列出服务商配置失败: ${error.message}`);
@@ -337,10 +334,10 @@ class ConfigStorage {
    */
   async batchImport(configs, options = {}) {
     await this.initialize();
-    
+
     const results = [];
     const backup = options.createBackup ? await this.createBackup() : null;
-    
+
     try {
       for (const [name, config] of Object.entries(configs)) {
         try {
@@ -348,20 +345,19 @@ class ConfigStorage {
           results.push({ name, success: true });
         } catch (error) {
           results.push({ name, success: false, error: error.message });
-          
+
           if (options.stopOnError) {
             throw error;
           }
         }
       }
-      
+
       return {
         results,
         backup,
         successful: results.filter(r => r.success).length,
         failed: results.filter(r => !r.success).length,
       };
-      
     } catch (error) {
       // 如果启用了备份且出现错误，可以选择回滚
       if (backup && options.rollbackOnError) {
@@ -376,11 +372,11 @@ class ConfigStorage {
    */
   async batchExport(options = {}) {
     await this.initialize();
-    
+
     try {
       const providers = await this.listProviders({ includeMetadata: true });
       const exportData = {};
-      
+
       for (const [name, config] of Object.entries(providers)) {
         if (options.excludeSensitive) {
           // 移除敏感信息
@@ -393,7 +389,7 @@ class ConfigStorage {
           exportData[name] = config;
         }
       }
-      
+
       return {
         version: this.currentVersion,
         exportDate: new Date().toISOString(),
@@ -413,26 +409,28 @@ class ConfigStorage {
     if (!config || typeof config !== 'object') {
       throw new Error('配置必须是对象');
     }
-    
+
     const required = ['alias', 'baseURL', 'apiKey'];
     for (const field of required) {
       if (!config[field]) {
         throw new Error(`缺少必要字段: ${field}`);
       }
     }
-    
+
     // 验证别名格式
     if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(config.alias)) {
-      throw new Error('别名格式无效：只能包含字母、数字、下划线和连字符，且必须以字母开头');
+      throw new Error(
+        '别名格式无效：只能包含字母、数字、下划线和连字符，且必须以字母开头'
+      );
     }
-    
+
     // 验证 URL 格式
     try {
       new URL(config.baseURL);
     } catch {
       throw new Error('无效的 Base URL 格式');
     }
-    
+
     // 验证超时时间
     if (config.timeout !== undefined) {
       const timeout = parseInt(config.timeout);
@@ -440,7 +438,7 @@ class ConfigStorage {
         throw new Error('超时时间必须在 1000-300000 毫秒之间');
       }
     }
-    
+
     return true;
   }
 
@@ -451,15 +449,15 @@ class ConfigStorage {
     if (!apiKey || apiKey.startsWith('enc:')) {
       return apiKey;
     }
-    
+
     try {
       const key = this.getEncryptionKey();
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-      
+
       let encrypted = cipher.update(apiKey, 'utf8', 'hex');
       encrypted += cipher.final('hex');
-      
+
       // 格式: enc:iv:encryptedData
       return `enc:${iv.toString('hex')}:${encrypted}`;
     } catch (error) {
@@ -474,22 +472,22 @@ class ConfigStorage {
     if (!encryptedKey || !encryptedKey.startsWith('enc:')) {
       return encryptedKey;
     }
-    
+
     try {
       const parts = encryptedKey.split(':');
       if (parts.length !== 3) {
         throw new Error('无效的加密数据格式');
       }
-      
+
       const [, ivHex, encrypted] = parts;
       const key = this.getEncryptionKey();
       const iv = Buffer.from(ivHex, 'hex');
-      
+
       const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-      
+
       let decrypted = decipher.update(encrypted, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
-      
+
       return decrypted;
     } catch (error) {
       throw new Error(`API密钥解密失败: ${error.message}`);
@@ -513,7 +511,7 @@ class ConfigStorage {
       const metadata = await this.readMetadata();
       const files = await fs.readdir(this.providersDir);
       const configCount = files.filter(f => f.endsWith('.json')).length;
-      
+
       metadata.configCount = configCount;
       await this.writeMetadata(metadata);
     } catch (error) {
@@ -527,11 +525,11 @@ class ConfigStorage {
   async createBackup() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupDir = path.join(this.baseDir, 'backups', timestamp);
-    
+
     await fs.ensureDir(backupDir);
     await fs.copy(this.providersDir, path.join(backupDir, 'providers'));
     await fs.copy(this.metadataFile, path.join(backupDir, 'metadata.json'));
-    
+
     return timestamp;
   }
 
@@ -540,18 +538,18 @@ class ConfigStorage {
    */
   async restoreBackup(timestamp) {
     const backupDir = path.join(this.baseDir, 'backups', timestamp);
-    
+
     if (!(await fs.pathExists(backupDir))) {
       throw new Error(`备份 ${timestamp} 不存在`);
     }
-    
+
     // 创建当前状态的备份
     await this.createBackup();
-    
+
     // 恢复配置
     await fs.copy(path.join(backupDir, 'providers'), this.providersDir);
     await fs.copy(path.join(backupDir, 'metadata.json'), this.metadataFile);
-    
+
     return true;
   }
 
@@ -560,15 +558,17 @@ class ConfigStorage {
    */
   async getStats() {
     await this.initialize();
-    
+
     try {
       const metadata = await this.readMetadata();
       const providers = await this.listProviders();
-      
+
       const enabled = Object.values(providers).filter(p => p.enabled).length;
       const disabled = Object.values(providers).filter(p => !p.enabled).length;
-      const withApiKeys = Object.values(providers).filter(p => p.hasApiKey).length;
-      
+      const withApiKeys = Object.values(providers).filter(
+        p => p.hasApiKey
+      ).length;
+
       return {
         version: metadata.version,
         created: metadata.created,
@@ -591,7 +591,7 @@ class ConfigStorage {
     try {
       let totalSize = 0;
       const items = await fs.readdir(this.baseDir, { withFileTypes: true });
-      
+
       for (const item of items) {
         const itemPath = path.join(this.baseDir, item.name);
         if (item.isDirectory()) {
@@ -601,7 +601,7 @@ class ConfigStorage {
           totalSize += stat.size;
         }
       }
-      
+
       return totalSize;
     } catch (error) {
       return 0;
@@ -613,10 +613,10 @@ class ConfigStorage {
    */
   async getDirectorySize(dirPath) {
     let totalSize = 0;
-    
+
     try {
       const items = await fs.readdir(dirPath, { withFileTypes: true });
-      
+
       for (const item of items) {
         const itemPath = path.join(dirPath, item.name);
         if (item.isDirectory()) {
@@ -629,7 +629,7 @@ class ConfigStorage {
     } catch (error) {
       // 忽略权限错误等
     }
-    
+
     return totalSize;
   }
 }

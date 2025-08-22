@@ -14,20 +14,20 @@ class CLIFramework {
     this.name = options.name || 'cc-config';
     this.description = options.description || 'Claude Code 配置工具集';
     this.version = pkg.version;
-    
+
     // 初始化 Commander 程序
     this.program = new Command();
     this.setupProgram();
-    
+
     // 配置路径
     this.configDir = path.join(os.homedir(), '.cc-config');
     this.logDir = path.join(this.configDir, 'logs');
     this.cacheDir = path.join(this.configDir, 'cache');
-    
+
     // 日志配置
     this.logLevel = options.logLevel || 'info';
     this.enableFileLogging = options.enableFileLogging !== false;
-    
+
     // 初始化标志
     this.initialized = false;
   }
@@ -88,18 +88,17 @@ class CLIFramework {
     try {
       // 创建必要的目录
       await this.ensureDirectories();
-      
+
       // 初始化日志系统
       if (this.enableFileLogging) {
         await this.initializeLogging();
       }
-      
+
       // 设置进程信号处理
       this.setupSignalHandlers();
-      
+
       this.initialized = true;
       this.log('debug', `CLI Framework initialized: ${this.configDir}`);
-      
     } catch (error) {
       this.log('error', `Failed to initialize CLI: ${error.message}`);
       throw error;
@@ -130,7 +129,7 @@ class CLIFramework {
    */
   async initializeLogging() {
     this.logFile = path.join(this.logDir, 'cc-config.log');
-    
+
     // 日志轮转：保留最近7天的日志
     await this.rotateLogFiles();
   }
@@ -148,7 +147,7 @@ class CLIFramework {
         if (file.endsWith('.log')) {
           const filePath = path.join(this.logDir, file);
           const stats = await fs.stat(filePath);
-          
+
           if (now - stats.mtime.getTime() > maxAge) {
             await fs.remove(filePath);
             this.log('debug', `Rotated old log file: ${file}`);
@@ -172,16 +171,16 @@ class CLIFramework {
 
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-    
+
     // 控制台输出
     this.outputToConsole(level, message, data);
-    
+
     // 文件日志
     if (this.enableFileLogging && this.logFile) {
-      const fileMessage = data 
+      const fileMessage = data
         ? `${logMessage}\n${JSON.stringify(data, null, 2)}\n`
         : `${logMessage}\n`;
-      
+
       fs.appendFile(this.logFile, fileMessage).catch(() => {
         // 忽略文件写入错误
       });
@@ -193,7 +192,7 @@ class CLIFramework {
    */
   outputToConsole(level, message, data) {
     let coloredMessage;
-    
+
     switch (level) {
       case 'error':
         coloredMessage = chalk.red(`❌ ${message}`);
@@ -212,7 +211,7 @@ class CLIFramework {
     }
 
     console.log(coloredMessage);
-    
+
     if (data && this.logLevel === 'debug') {
       console.log(chalk.gray(JSON.stringify(data, null, 2)));
     }
@@ -229,12 +228,12 @@ class CLIFramework {
 
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
-    
+
     // 处理未捕获的异常
-    process.on('uncaughtException', (error) => {
-      this.log('error', 'Uncaught Exception', { 
+    process.on('uncaughtException', error => {
+      this.log('error', 'Uncaught Exception', {
         message: error.message,
-        stack: error.stack 
+        stack: error.stack,
       });
       process.exit(1);
     });
@@ -242,7 +241,7 @@ class CLIFramework {
     process.on('unhandledRejection', (reason, promise) => {
       this.log('error', 'Unhandled Promise Rejection', {
         reason: reason.toString(),
-        promise: promise.toString()
+        promise: promise.toString(),
       });
       process.exit(1);
     });
@@ -259,14 +258,12 @@ class CLIFramework {
    * 注册命令组
    */
   commandGroup(name, description) {
-    const cmd = this.program
-      .command(name)
-      .description(description);
-    
+    const cmd = this.program.command(name).description(description);
+
     // 为命令组添加通用选项
     cmd.option('-f, --force', '强制执行，跳过确认');
     cmd.option('-y, --yes', '对所有询问回答是');
-    
+
     return cmd;
   }
 
@@ -289,7 +286,7 @@ class CLIFramework {
    */
   addErrorHandler(handler) {
     this.program.exitOverride();
-    
+
     const originalParse = this.program.parse;
     this.program.parse = async (...args) => {
       try {
@@ -300,7 +297,7 @@ class CLIFramework {
           handler(error);
         } else {
           this.log('error', `Command failed: ${error.message}`, {
-            stack: error.stack
+            stack: error.stack,
           });
           process.exit(1);
         }
@@ -364,14 +361,14 @@ class CLIFramework {
    */
   async getDirectorySize(dirPath) {
     let totalSize = 0;
-    
+
     try {
       const items = await fs.readdir(dirPath);
-      
+
       for (const item of items) {
         const itemPath = path.join(dirPath, item);
         const stat = await fs.stat(itemPath);
-        
+
         if (stat.isDirectory()) {
           totalSize += await this.getDirectorySize(itemPath);
         } else {
@@ -381,7 +378,7 @@ class CLIFramework {
     } catch (error) {
       // 忽略权限错误等
     }
-    
+
     return totalSize;
   }
 
@@ -390,16 +387,16 @@ class CLIFramework {
    */
   async cleanup() {
     this.log('info', 'Cleaning up cache and temporary files...');
-    
+
     try {
       // 清理缓存目录
       if (await fs.pathExists(this.cacheDir)) {
         await fs.emptyDir(this.cacheDir);
       }
-      
+
       // 清理旧日志
       await this.rotateLogFiles();
-      
+
       this.log('info', 'Cleanup completed');
       return true;
     } catch (error) {
