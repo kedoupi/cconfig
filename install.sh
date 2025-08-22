@@ -556,15 +556,40 @@ EOF
     success "Shell aliases generated"
 }
 
-# Detect shell type
+# Detect shell type with multiple methods
 detect_shell() {
+    # Method 1: Check environment variables
     if [ -n "${ZSH_VERSION:-}" ]; then
         echo "zsh"
+        return
     elif [ -n "${BASH_VERSION:-}" ]; then
         echo "bash"
-    else
-        echo "unknown"
+        return
     fi
+    
+    # Method 2: Check SHELL variable
+    case "${SHELL:-}" in
+        */zsh)
+            echo "zsh"
+            return
+            ;;
+        */bash)
+            echo "bash"
+            return
+            ;;
+    esac
+    
+    # Method 3: Check current process
+    if ps -p $$ -o comm= | grep -q zsh; then
+        echo "zsh"
+        return
+    elif ps -p $$ -o comm= | grep -q bash; then
+        echo "bash"
+        return
+    fi
+    
+    # Default fallback
+    echo "unknown"
 }
 
 # Setup shell integration
