@@ -1,334 +1,434 @@
 #!/usr/bin/env node
 
 /**
- * 集成测试 - 测试核心安装系统功能
- * 使用真实的命令和模块进行测试
+ * Integration Test for Claude Code Kit
+ * 
+ * Tests the complete workflow of the system to ensure all components
+ * work together properly.
  */
 
-const { deploy } = require('../src/commands/deploy');
-const ConfigManager = require('../src/core/ConfigManager');
-const AliasGenerator = require('../src/core/AliasGenerator');
-const ConfigStorage = require('../src/core/ConfigStorage');
 const fs = require('fs-extra');
 const path = require('path');
-const chalk = require('chalk');
+const os = require('os');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 
-class IntegrationTester {
+// Import core modules
+const ConfigManager = require('../src/core/ConfigManager');
+const ProviderManager = require('../src/core/ProviderManager');
+const BackupManager = require('../src/core/BackupManager');
+const AliasGenerator = require('../src/core/AliasGenerator');
+const ErrorHandler = require('../src/utils/errorHandler');
+
+const execAsync = promisify(exec);
+
+// Test configuration
+const TEST_CONFIG_DIR = path.join(os.tmpdir(), 'cc-test-' + Date.now());
+const TEST_CLAUDE_DIR = path.join(os.tmpdir(), 'claude-test-' + Date.now());
+
+class IntegrationTest {
   constructor() {
-    this.testDir = path.join(__dirname, '../tmp-integration-test');
-    this.originalHome = process.env.HOME;
-    this.results = [];
+    this.configManager = new ConfigManager(TEST_CONFIG_DIR);
+    this.providerManager = new ProviderManager(TEST_CONFIG_DIR);
+    this.backupManager = new BackupManager(TEST_CONFIG_DIR, TEST_CLAUDE_DIR);
+    this.aliasGenerator = new AliasGenerator(TEST_CONFIG_DIR);
+    this.errorHandler = new ErrorHandler();
+    
+    this.results = {
+      passed: 0,
+      failed: 0,
+      errors: []
+    };
   }
 
+  /**
+   * Run all integration tests
+   */
   async runTests() {
-    console.log(chalk.blue('🔬 Phase 2 集成测试 - 核心安装系统\n'));
-    
+    console.log('🧪 Starting Claude Code Kit Integration Tests\n');
+    console.log(`Test Config Dir: ${TEST_CONFIG_DIR}`);
+    console.log(`Test Claude Dir: ${TEST_CLAUDE_DIR}\n`);
+
     try {
-      await this.setupTestEnvironment();
+      // Test each component individually
+      await this.testConfigManager();
+      await this.testProviderManager();
+      await this.testBackupManager();
+      await this.testAliasGenerator();
+      await this.testErrorHandler();
       
-      // 测试核心安装系统功能
-      await this.testConfigManagerInit();
-      await this.testConfigStorage();
-      await this.testAliasGeneration();
-      await this.testDeployFunction();
-      await this.testTemplateSystem();
+      // Test full workflow
+      await this.testFullWorkflow();
       
-      this.printResults();
-      
-    } catch (error) {
-      console.error(chalk.red(`集成测试失败: ${error.message}`));
-      return false;
-    } finally {
+      // Cleanup
       await this.cleanup();
-    }
-    
-    return this.results.every(r => r.passed);
-  }
-
-  async setupTestEnvironment() {
-    console.log(chalk.yellow('🔧 设置测试环境...'));
-    
-    await fs.ensureDir(this.testDir);
-    process.env.HOME = this.testDir;
-    
-    console.log(chalk.green('✅ 测试环境设置完成\n'));
-  }
-
-  async testConfigManagerInit() {
-    console.log(chalk.cyan('📋 测试 ConfigManager 初始化...'));
-    
-    try {
-      const configManager = new ConfigManager();
-      await configManager.initialize();
       
-      const paths = configManager.getPaths();
-      
-      // 验证路径配置
-      this.assert(
-        '配置路径设置正确',
-        paths.configDir && paths.providersDir && paths.backupDir
-      );
-      
-      // 验证目录创建
-      this.assert(
-        '.cc-config目录已创建',
-        await fs.pathExists(paths.configDir)
-      );
-      
-      this.assert(
-        'providers目录已创建',
-        await fs.pathExists(paths.providersDir)
-      );
-      
-      console.log(chalk.green('✅ ConfigManager 测试通过\n'));
+      // Report results
+      this.reportResults();
       
     } catch (error) {
-      this.recordTest('ConfigManager初始化', false, error.message);
+      console.error('❌ Test suite failed:', error.message);
+      await this.cleanup();
+      process.exit(1);
     }
   }
 
-  async testConfigStorage() {
-    console.log(chalk.cyan('💾 测试 ConfigStorage 功能...'));
+  /**
+   * Test ConfigManager functionality
+   */
+  async testConfigManager() {
+    console.log('📝 Testing ConfigManager...');
     
     try {
-      const configStorage = new ConfigStorage();
-      await configStorage.initialize();
+      // Test initialization
+      await this.configManager.init();
+      this.pass('ConfigManager initialization');
       
-      // 测试服务商配置
-      const testConfig = {
-        name: 'Test Provider',
-        alias: 'test',
-        baseURL: 'https://api.test.com',
-        apiKey: 'test-key-12345',
-        enabled: true
-      };
-      
-      // 保存配置
-      await configStorage.writeProvider('test', testConfig);
-      
-      // 读取配置
-      const savedConfig = await configStorage.readProvider('test');
-      
-      this.assert(
-        '服务商配置保存和读取',
-        savedConfig && savedConfig.name === testConfig.name
-      );
-      
-      // 测试列表功能
-      const providers = await configStorage.listProviders();
-      
-      this.assert(
-        '服务商列表功能',
-        providers && providers.test
-      );
-      
-      console.log(chalk.green('✅ ConfigStorage 测试通过\n'));
-      
-    } catch (error) {
-      this.recordTest('ConfigStorage功能', false, error.message);
-    }
-  }
-
-  async testAliasGeneration() {
-    console.log(chalk.cyan('⚡ 测试别名生成功能...'));
-    
-    try {
-      const configStorage = new ConfigStorage();
-      await configStorage.initialize();
-      
-      // 添加测试配置
-      await configStorage.writeProvider('test', {
-        name: 'Test Provider',
-        alias: 'test',
-        baseURL: 'https://api.test.com',
-        apiKey: 'test-key',
-        enabled: true
-      });
-      
-      const aliasGenerator = new AliasGenerator(configStorage);
-      
-      // 生成别名脚本
-      const script = await aliasGenerator.generateAliases();
-      
-      this.assert(
-        '别名脚本生成',
-        script && script.includes('#!/bin/bash')
-      );
-      
-      this.assert(
-        '别名脚本包含服务商',
-        script.includes('test')
-      );
-      
-      // 测试Shell检测
-      const shell = aliasGenerator.detectShell();
-      
-      this.assert(
-        'Shell类型检测',
-        ['bash', 'zsh', 'fish'].includes(shell)
-      );
-      
-      console.log(chalk.green('✅ 别名生成测试通过\n'));
-      
-    } catch (error) {
-      this.recordTest('别名生成功能', false, error.message);
-    }
-  }
-
-  async testDeployFunction() {
-    console.log(chalk.cyan('🚀 测试部署功能...'));
-    
-    try {
-      // 模拟已安装的目录结构
-      const installDir = path.join(this.testDir, '.cc-config');
-      const templatesDir = path.join(installDir, '.claude-templates');
-      
-      await fs.ensureDir(templatesDir);
-      
-      // 复制真实模板
-      const sourceTemplates = path.join(__dirname, '../.claude-templates');
-      if (await fs.pathExists(sourceTemplates)) {
-        await fs.copy(sourceTemplates, templatesDir);
+      // Test directory creation
+      const configExists = await fs.pathExists(TEST_CONFIG_DIR);
+      if (configExists) {
+        this.pass('Configuration directory created');
+      } else {
+        this.fail('Configuration directory not created');
       }
       
-      // 测试部署功能 (使用内置模板)
-      await deploy({ 
-        template: 'minimal', 
-        force: true, 
-        overwrite: true 
+      // Test validation
+      const validation = await this.configManager.validateConfiguration();
+      if (validation.valid) {
+        this.pass('Configuration validation');
+      } else {
+        this.fail(`Configuration validation failed: ${validation.issues.join(', ')}`);
+      }
+      
+      // Test system info
+      const systemInfo = await this.configManager.getSystemInfo();
+      if (systemInfo && systemInfo.version) {
+        this.pass('System info retrieval');
+      } else {
+        this.fail('System info retrieval failed');
+      }
+      
+    } catch (error) {
+      this.fail(`ConfigManager test failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Test ProviderManager functionality
+   */
+  async testProviderManager() {
+    console.log('🔧 Testing ProviderManager...');
+    
+    try {
+      // Test adding a provider
+      const testProvider = {
+        alias: 'test-provider',
+        baseURL: 'https://api.example.com',
+        apiKey: 'test-api-key-123456789',
+        timeout: '5000'
+      };
+      
+      await this.providerManager.addProvider(testProvider);
+      this.pass('Provider addition');
+      
+      // Test provider retrieval
+      const provider = await this.providerManager.getProvider('test-provider');
+      if (provider && provider.alias === 'test-provider') {
+        this.pass('Provider retrieval');
+      } else {
+        this.fail('Provider retrieval failed');
+      }
+      
+      // Test provider listing
+      const providers = await this.providerManager.listProviders();
+      if (providers.length === 1 && providers[0].alias === 'test-provider') {
+        this.pass('Provider listing');
+      } else {
+        this.fail('Provider listing failed');
+      }
+      
+      // Test provider update
+      const updatedProvider = { ...testProvider, timeout: '10000' };
+      await this.providerManager.updateProvider('test-provider', updatedProvider);
+      const retrievedProvider = await this.providerManager.getProvider('test-provider');
+      if (retrievedProvider.timeout === '10000') {
+        this.pass('Provider update');
+      } else {
+        this.fail('Provider update failed');
+      }
+      
+      // Test provider testing
+      const testResult = await this.providerManager.testProvider('test-provider');
+      if (testResult && typeof testResult.reachable === 'boolean') {
+        this.pass('Provider testing');
+      } else {
+        this.fail('Provider testing failed');
+      }
+      
+    } catch (error) {
+      this.fail(`ProviderManager test failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Test BackupManager functionality
+   */
+  async testBackupManager() {
+    console.log('💾 Testing BackupManager...');
+    
+    try {
+      // Create some test files in Claude directory
+      await fs.ensureDir(TEST_CLAUDE_DIR);
+      await fs.writeFile(path.join(TEST_CLAUDE_DIR, 'test-file.txt'), 'test content');
+      
+      // Test backup creation
+      const timestamp = await this.backupManager.createBackup('Integration test backup');
+      if (timestamp) {
+        this.pass('Backup creation');
+      } else {
+        this.fail('Backup creation failed');
+      }
+      
+      // Test backup listing
+      const backups = await this.backupManager.listBackups();
+      if (backups.length > 0 && backups[0].timestamp === timestamp) {
+        this.pass('Backup listing');
+      } else {
+        this.fail('Backup listing failed');
+      }
+      
+      // Test backup verification
+      const verification = await this.backupManager.verifyBackup(timestamp);
+      if (verification.valid) {
+        this.pass('Backup verification');
+      } else {
+        this.fail(`Backup verification failed: ${verification.issues.join(', ')}`);
+      }
+      
+      // Test backup statistics
+      const stats = await this.backupManager.getBackupStats();
+      if (stats && stats.count === backups.length) {
+        this.pass('Backup statistics');
+      } else {
+        this.fail('Backup statistics failed');
+      }
+      
+    } catch (error) {
+      this.fail(`BackupManager test failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Test AliasGenerator functionality
+   */
+  async testAliasGenerator() {
+    console.log('🔗 Testing AliasGenerator...');
+    
+    try {
+      // Test alias generation
+      await this.aliasGenerator.generateAliases();
+      this.pass('Alias generation');
+      
+      // Test aliases file creation
+      const aliasesFile = path.join(TEST_CONFIG_DIR, 'aliases.sh');
+      const aliasesExist = await fs.pathExists(aliasesFile);
+      if (aliasesExist) {
+        this.pass('Aliases file creation');
+      } else {
+        this.fail('Aliases file not created');
+      }
+      
+      // Test aliases content
+      const aliasContent = await fs.readFile(aliasesFile, 'utf8');
+      if (aliasContent.includes('Claude Code Kit') && aliasContent.includes('test-provider')) {
+        this.pass('Aliases content validation');
+      } else {
+        this.fail('Aliases content validation failed');
+      }
+      
+      // Test alias statistics
+      const stats = await this.aliasGenerator.getEnhancedStats();
+      if (stats && stats.totalProviders > 0) {
+        this.pass('Alias statistics');
+      } else {
+        this.fail('Alias statistics failed');
+      }
+      
+      // Test preview generation
+      const preview = await this.aliasGenerator.previewAliases();
+      if (preview && preview.includes('test-provider')) {
+        this.pass('Alias preview generation');
+      } else {
+        this.fail('Alias preview generation failed');
+      }
+      
+    } catch (error) {
+      this.fail(`AliasGenerator test failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Test ErrorHandler functionality
+   */
+  async testErrorHandler() {
+    console.log('🚨 Testing ErrorHandler...');
+    
+    try {
+      // Test error handling
+      const testError = new Error('Test error for integration test');
+      testError.code = 'TEST_ERROR';
+      
+      const formattedError = await this.errorHandler.handleError(testError, {
+        operation: 'integration-test',
+        component: 'ErrorHandler'
       });
       
-      // 验证部署结果
-      const claudeDir = path.join(this.testDir, '.claude');
+      if (formattedError && formattedError.category && formattedError.suggestions) {
+        this.pass('Error handling and formatting');
+      } else {
+        this.fail('Error handling failed');
+      }
       
-      this.assert(
-        '.claude目录已创建',
-        await fs.pathExists(claudeDir)
-      );
+      // Test error logging
+      const recentErrors = await this.errorHandler.getRecentErrors(1);
+      if (recentErrors.length > 0 && recentErrors[0].message === 'Test error for integration test') {
+        this.pass('Error logging');
+      } else {
+        this.fail('Error logging failed');
+      }
       
-      console.log(chalk.green('✅ 部署功能测试通过\n'));
+      // Test error statistics
+      const stats = await this.errorHandler.getErrorStats();
+      if (stats && stats.total >= 1) {
+        this.pass('Error statistics');
+      } else {
+        this.fail('Error statistics failed');
+      }
       
     } catch (error) {
-      this.recordTest('部署功能', false, error.message);
+      this.fail(`ErrorHandler test failed: ${error.message}`);
     }
   }
 
-  async testTemplateSystem() {
-    console.log(chalk.cyan('🎨 测试模板系统...'));
+  /**
+   * Test full workflow integration
+   */
+  async testFullWorkflow() {
+    console.log('🔄 Testing Full Workflow Integration...');
     
     try {
-      const templatesDir = path.join(__dirname, '../.claude-templates');
+      // Create a second provider
+      const secondProvider = {
+        alias: 'workflow-test',
+        baseURL: 'https://api.workflow.test',
+        apiKey: 'workflow-test-key-123456789',
+        timeout: '3000'
+      };
       
-      // 验证模板文件存在
-      this.assert(
-        'settings.json模板存在',
-        await fs.pathExists(path.join(templatesDir, 'settings.json'))
-      );
+      await this.providerManager.addProvider(secondProvider);
       
-      this.assert(
-        'CLAUDE.md模板存在',
-        await fs.pathExists(path.join(templatesDir, 'CLAUDE.md'))
-      );
+      // Regenerate aliases
+      await this.aliasGenerator.generateAliases();
       
-      this.assert(
-        'commands目录存在',
-        await fs.pathExists(path.join(templatesDir, 'commands'))
-      );
+      // Verify aliases include both providers
+      const aliasContent = await fs.readFile(path.join(TEST_CONFIG_DIR, 'aliases.sh'), 'utf8');
+      if (aliasContent.includes('test-provider') && aliasContent.includes('workflow-test')) {
+        this.pass('Multi-provider alias generation');
+      } else {
+        this.fail('Multi-provider alias generation failed');
+      }
       
-      this.assert(
-        'agents目录存在',
-        await fs.pathExists(path.join(templatesDir, 'agents'))
-      );
+      // Create another backup
+      await this.backupManager.createBackup('Workflow test backup');
       
-      this.assert(
-        'output-styles目录存在',
-        await fs.pathExists(path.join(templatesDir, 'output-styles'))
-      );
+      // List all backups
+      const allBackups = await this.backupManager.listBackups();
+      if (allBackups.length >= 2) {
+        this.pass('Multiple backup management');
+      } else {
+        this.fail('Multiple backup management failed');
+      }
       
-      // 验证模板内容
-      const settingsTemplate = await fs.readJson(path.join(templatesDir, 'settings.json'));
+      // Test configuration validation with multiple components
+      const validation = await this.configManager.validateConfiguration();
+      if (validation.valid) {
+        this.pass('Full system validation');
+      } else {
+        this.fail(`Full system validation failed: ${validation.issues.join(', ')}`);
+      }
       
-      this.assert(
-        'settings.json模板格式正确',
-        settingsTemplate && settingsTemplate.providers !== undefined
-      );
-      
-      console.log(chalk.green('✅ 模板系统测试通过\n'));
+      // Test provider removal
+      await this.providerManager.removeProvider('workflow-test');
+      const remainingProviders = await this.providerManager.listProviders();
+      if (remainingProviders.length === 1 && remainingProviders[0].alias === 'test-provider') {
+        this.pass('Provider removal');
+      } else {
+        this.fail('Provider removal failed');
+      }
       
     } catch (error) {
-      this.recordTest('模板系统', false, error.message);
+      this.fail(`Full workflow test failed: ${error.message}`);
     }
   }
 
-  assert(description, condition) {
-    this.recordTest(description, condition);
-    if (condition) {
-      console.log(chalk.green(`  ✅ ${description}`));
-    } else {
-      console.log(chalk.red(`  ❌ ${description}`));
-    }
+  /**
+   * Mark test as passed
+   */
+  pass(testName) {
+    console.log(`  ✅ ${testName}`);
+    this.results.passed++;
   }
 
-  recordTest(name, passed, error = null) {
-    this.results.push({ name, passed, error });
+  /**
+   * Mark test as failed
+   */
+  fail(testName) {
+    console.log(`  ❌ ${testName}`);
+    this.results.failed++;
+    this.results.errors.push(testName);
   }
 
-  printResults() {
-    console.log(chalk.blue('📊 集成测试结果汇总'));
-    console.log('='.repeat(50));
-    
-    const total = this.results.length;
-    const passed = this.results.filter(r => r.passed).length;
-    const failed = total - passed;
-    
-    console.log(`总测试数: ${total}`);
-    console.log(chalk.green(`通过: ${passed}`));
-    console.log(chalk.red(`失败: ${failed}`));
-    
-    const passRate = ((passed / total) * 100).toFixed(1);
-    console.log(`通过率: ${passRate}%`);
-    
-    if (failed > 0) {
-      console.log(chalk.red('\n❌ 失败的测试:'));
-      this.results
-        .filter(r => !r.passed)
-        .forEach(test => {
-          console.log(`  - ${test.name}${test.error ? ': ' + test.error : ''}`);
-        });
-    }
-    
-    console.log();
-    
-    if (failed === 0) {
-      console.log(chalk.green('🎉 所有集成测试通过！Phase 2 核心安装系统功能正常。'));
-    } else {
-      console.log(chalk.yellow('⚠️ 部分测试失败，请检查相关功能。'));
-    }
-  }
-
+  /**
+   * Clean up test directories
+   */
   async cleanup() {
-    process.env.HOME = this.originalHome;
-    
     try {
-      await fs.remove(this.testDir);
-      console.log(chalk.gray('🧹 测试环境已清理'));
+      await fs.remove(TEST_CONFIG_DIR);
+      await fs.remove(TEST_CLAUDE_DIR);
     } catch (error) {
-      console.log(chalk.yellow(`⚠️ 清理失败: ${error.message}`));
+      console.warn('Warning: Failed to clean up test directories:', error.message);
+    }
+  }
+
+  /**
+   * Report test results
+   */
+  reportResults() {
+    console.log('\n📊 Integration Test Results');
+    console.log('=====================================');
+    console.log(`Total Tests: ${this.results.passed + this.results.failed}`);
+    console.log(`Passed: ${this.results.passed}`);
+    console.log(`Failed: ${this.results.failed}`);
+    
+    if (this.results.failed > 0) {
+      console.log('\n❌ Failed Tests:');
+      this.results.errors.forEach(error => console.log(`  - ${error}`));
+      console.log('\n🚨 Integration tests failed! Please fix the issues above.');
+      process.exit(1);
+    } else {
+      console.log('\n🎉 All integration tests passed successfully!');
+      console.log('✅ Claude Code Kit is ready for production use.');
     }
   }
 }
 
-// 运行测试
+// Run tests if this file is executed directly
 if (require.main === module) {
-  const tester = new IntegrationTester();
-  tester.runTests()
-    .then(success => {
-      process.exit(success ? 0 : 1);
-    })
-    .catch(error => {
-      console.error(chalk.red('集成测试异常:', error.message));
-      process.exit(1);
-    });
+  const test = new IntegrationTest();
+  test.runTests().catch(error => {
+    console.error('❌ Test execution failed:', error);
+    process.exit(1);
+  });
 }
 
-module.exports = { IntegrationTester };
+module.exports = IntegrationTest;

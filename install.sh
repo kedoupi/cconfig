@@ -1,877 +1,771 @@
 #!/bin/bash
 
-# Claude Code Kit 安装脚本
-# 作者: RenYuan <kedoupi@gmail.com>
-# 版本: 1.0.0
+# Claude Code Kit Installation Script
+# This script installs and configures the Claude Code Kit with optimized configurations
+# Version: 2.0.0 - Production Ready
 
-set -e
+set -euo pipefail
 
-# 颜色定义
+# Global variables for cleanup
+TEMP_FILES=()
+BACKUP_CREATED=""
+INSTALLATION_STATE=""
+ROLLBACK_NEEDED=false
+
+# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# 配置变量
-INSTALL_DIR="$HOME/.cc-config"
-BIN_DIR="$HOME/.local/bin"
-REPO_URL="https://github.com/kedoupi/claude-code-kit"
-NODE_MIN_VERSION="14"
-CLI_COMMAND="cc-config"
+# Logging functions with timestamp and log file support
+LOG_FILE="/tmp/claude-code-kit-install-$(date +%Y%m%d_%H%M%S).log"
 
-# 日志配置
-LOG_FILE="$HOME/.cc-config-install.log"
-VERBOSE=${VERBOSE:-false}
-
-# 日志记录函数
-log() {
-    local level=$1
-    local message=$2
+log_with_timestamp() {
+    local level="$1"
+    local message="$2"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
 }
 
-log_info() { log "INFO" "$1"; }
-log_warn() { log "WARN" "$1"; }
-log_error() { log "ERROR" "$1"; }
-log_debug() { 
-    if [ "$VERBOSE" = true ]; then
-        log "DEBUG" "$1"
+info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+    log_with_timestamp "INFO" "$1"
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    log_with_timestamp "SUCCESS" "$1"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+    log_with_timestamp "WARN" "$1"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+    log_with_timestamp "ERROR" "$1"
+    ROLLBACK_NEEDED=true
+    cleanup_and_exit 1
+}
+
+debug() {
+    if [ "${DEBUG:-false}" = "true" ]; then
+        echo -e "${NC}[DEBUG]${NC} $1"
+        log_with_timestamp "DEBUG" "$1"
     fi
 }
 
-# 打印带颜色的消息
-print_message() {
-    local color=$1
-    local message=$2
-    echo -e "${color}$message${NC}"
-    log_info "$message"
+# Configuration
+CLAUDE_CODE_KIT_DIR="$HOME/.cc-config"
+CLAUDE_CONFIG_DIR="$HOME/.claude"
+PROVIDERS_DIR="$CLAUDE_CODE_KIT_DIR/providers"
+BACKUPS_DIR="$CLAUDE_CODE_KIT_DIR/backups"
+ALIASES_FILE="$CLAUDE_CODE_KIT_DIR/aliases.sh"
+REQUIRED_NODE_VERSION="18"
+RECOMMENDED_NODE_VERSION="22"
+
+# Add temp files to cleanup list
+add_temp_file() {
+    TEMP_FILES+=("$1")
 }
 
-print_success() { 
-    print_message "$GREEN" "✅ $1"
-}
-
-print_error() { 
-    print_message "$RED" "❌ $1"
-    log_error "$1"
-}
-
-print_warning() { 
-    print_message "$YELLOW" "⚠️  $1"
-    log_warn "$1"
-}
-
-print_info() { 
-    print_message "$BLUE" "ℹ️  $1"
-}
-
-print_step() { 
-    print_message "$CYAN" "🔧 $1"
-}
-
-# 详细模式输出
-print_debug() {
-    if [ "$VERBOSE" = true ]; then
-        print_message "$NC" "🐛 DEBUG: $1"
-        log_debug "$1"
-    fi
-}
-
-# 执行命令并记录日志
-execute_with_log() {
-    local cmd="$1"
-    local success_msg="$2"
-    local error_msg="$3"
-    
-    log_debug "执行命令: $cmd"
-    
-    if eval "$cmd" >> "$LOG_FILE" 2>&1; then
-        if [ -n "$success_msg" ]; then
-            print_debug "$success_msg"
-        fi
-        return 0
-    else
-        local exit_code=$?
-        if [ -n "$error_msg" ]; then
-            print_error "$error_msg"
-            log_error "命令失败 (退出码: $exit_code): $cmd"
-        fi
-        return $exit_code
-    fi
-}
-
-# 检查命令是否存在
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# 安全地创建目录
-safe_mkdir() {
-    local dir="$1"
-    local mode="${2:-755}"
-    
-    if [ ! -d "$dir" ]; then
-        if mkdir -p "$dir" && chmod "$mode" "$dir"; then
-            log_debug "目录创建成功: $dir (权限: $mode)"
-            return 0
-        else
-            log_error "目录创建失败: $dir"
-            return 1
-        fi
-    else
-        log_debug "目录已存在: $dir"
-        return 0
-    fi
-}
-
-# 显示欢迎信息
-show_welcome() {
-    # 初始化日志文件
-    echo "=== Claude Code Kit 安装开始 ===" > "$LOG_FILE"
-    log_info "安装程序启动"
-    log_info "操作系统: $OSTYPE"
-    log_info "用户: $(whoami)"
-    log_info "工作目录: $(pwd)"
-    log_info "Shell: $SHELL"
-    log_info "详细模式: $VERBOSE"
-    
-    echo ""
-    print_message "$CYAN" "╔══════════════════════════════════════╗"
-    print_message "$CYAN" "║        Claude Code Kit 安装程序        ║"
-    print_message "$CYAN" "║           版本: 1.0.0                 ║"
-    print_message "$CYAN" "╚══════════════════════════════════════╝"
-    echo ""
-    print_info "Claude Code 配置工具集 - 支持多服务商API切换"
-    print_info "日志文件: $LOG_FILE"
-    if [ "$VERBOSE" = true ]; then
-        print_info "详细模式已启用"
-    fi
-    echo ""
-}
-
-# 检查系统要求
-check_system() {
-    print_step "检查系统环境..."
-    
-    # 检查操作系统
-    if [[ "$OSTYPE" != "darwin"* ]] && [[ "$OSTYPE" != "linux-gnu"* ]]; then
-        print_error "不支持的操作系统: $OSTYPE"
-        print_info "支持的系统: macOS, Linux"
-        exit 1
-    fi
-    
-    print_info "操作系统: $OSTYPE ✓"
-    
-    # 检查必要工具
-    local required_tools=("curl" "git")
-    for tool in "${required_tools[@]}"; do
-        if ! command -v $tool &> /dev/null; then
-            print_error "缺少必要工具: $tool"
-            exit 1
-        fi
-        print_info "$tool: 已安装 ✓"
-    done
-    
-    print_success "系统环境检查通过"
-}
-
-# 检查并安装 Node.js
-check_nodejs() {
-    print_step "检查 Node.js 环境..."
-    
-    if command -v node &> /dev/null; then
-        local node_version=$(node -v | sed 's/v//' | cut -d. -f1)
-        if [ "$node_version" -ge "$NODE_MIN_VERSION" ]; then
-            print_success "Node.js 版本检查通过: $(node -v)"
-            return 0
-        else
-            print_warning "Node.js 版本过低: $(node -v)，需要 >= v$NODE_MIN_VERSION"
-        fi
-    else
-        print_warning "未找到 Node.js"
-    fi
-    
-    # 提示用户安装 Node.js
-    print_info "需要安装或升级 Node.js"
-    print_info "推荐安装方式:"
-    
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        print_info "  macOS: brew install node"
-        print_info "  或者访问: https://nodejs.org/"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        print_info "  Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs"
-        print_info "  CentOS/RHEL: curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash - && sudo yum install -y nodejs"
-        print_info "  或者访问: https://nodejs.org/"
-    fi
-    
-    echo ""
-    read -p "$(print_message "$YELLOW" "是否继续安装? (需要先手动安装Node.js) [y/N]: ")" -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "安装已取消"
-        exit 0
-    fi
-    
-    # 再次检查
-    if ! command -v node &> /dev/null; then
-        print_error "请先安装 Node.js 后重新运行安装脚本"
-        exit 1
-    fi
-}
-
-# 创建安装目录
-create_directories() {
-    print_step "创建安装目录..."
-    
-    # 备份现有配置
-    if [ -d "$INSTALL_DIR" ]; then
-        local backup_name="$INSTALL_DIR.backup-$(date +%Y%m%d-%H%M%S)"
-        print_warning "发现现有配置，备份为: $backup_name"
-        mv "$INSTALL_DIR" "$backup_name"
-    fi
-    
-    # 创建新目录
-    mkdir -p "$INSTALL_DIR"
-    mkdir -p "$BIN_DIR"
-    
-    # 设置权限
-    chmod 700 "$INSTALL_DIR"
-    
-    print_success "目录创建完成"
-}
-
-# 下载和安装应用
-install_application() {
-    print_step "下载 Claude Code Kit..."
-    
-    local temp_dir=$(mktemp -d)
-    local download_url=""
-    
-    # 尝试从GitHub下载最新版本
-    if command -v curl &> /dev/null; then
-        # 获取最新release信息
-        local latest_release=$(curl -s "https://api.github.com/repos/kedoupi/claude-code-kit/releases/latest" 2>/dev/null || echo "")
-        
-        if [ -n "$latest_release" ] && echo "$latest_release" | grep -q "tarball_url"; then
-            download_url=$(echo "$latest_release" | grep '"tarball_url"' | cut -d '"' -f 4)
-            print_info "找到最新版本，正在下载..."
-        fi
-    fi
-    
-    # 如果没有找到release，使用git clone
-    if [ -z "$download_url" ]; then
-        print_info "使用Git克隆仓库..."
-        if git clone "$REPO_URL.git" "$temp_dir" 2>/dev/null; then
-            print_success "代码下载完成"
-        else
-            print_error "代码下载失败，请检查网络连接"
-            print_info "你也可以手动下载: $REPO_URL"
-            exit 1
-        fi
-    else
-        # 下载release版本
-        if curl -L "$download_url" | tar -xz -C "$temp_dir" --strip-components=1 2>/dev/null; then
-            print_success "Release版本下载完成"
-        else
-            print_warning "Release下载失败，尝试Git方式..."
-            rm -rf "$temp_dir"
-            temp_dir=$(mktemp -d)
-            if git clone "$REPO_URL.git" "$temp_dir" 2>/dev/null; then
-                print_success "代码下载完成"
-            else
-                print_error "下载失败"
-                exit 1
-            fi
-        fi
-    fi
-    
-    # 检查下载的文件
-    if [ ! -f "$temp_dir/package.json" ]; then
-        print_error "下载的文件不完整"
-        exit 1
-    fi
-    
-    # 安装依赖
-    print_step "安装依赖..."
-    cd "$temp_dir"
-    
-    if npm install --production --silent 2>/dev/null; then
-        print_success "依赖安装完成"
-    else
-        print_error "依赖安装失败"
-        exit 1
-    fi
-    
-    # 复制文件到安装目录
-    print_step "安装文件..."
-    cp -r package.json src bin "$INSTALL_DIR/"
-    cp -r node_modules "$INSTALL_DIR/"
-    
-    # 复制配置模板
-    if [ -d ".claude-templates" ]; then
-        cp -r .claude-templates "$INSTALL_DIR/"
-        print_success "配置模板复制完成"
-    else
-        print_warning "未找到配置模板目录"
-    fi
-    
-    # 创建可执行文件链接
-    local cli_script="$INSTALL_DIR/bin/cc-config.js"
-    local cli_link="$BIN_DIR/$CLI_COMMAND"
-    
-    # 确保可执行权限
-    chmod +x "$cli_script"
-    
-    # 创建符号链接
-    ln -sf "$cli_script" "$cli_link"
-    
-    # 清理临时目录
-    rm -rf "$temp_dir"
-    
-    print_success "应用安装完成"
-}
-
-# 备份现有配置
-backup_existing_config() {
-    print_step "备份现有配置..."
-    
-    local claude_dir="$HOME/.claude"
-    local cc_config_dir="$HOME/.cc-config"
-    local backup_base="$HOME/.claude-config-backup"
-    local timestamp=$(date +%Y%m%d-%H%M%S)
-    local backup_dir="$backup_base/$timestamp"
-    
-    local has_backup=false
-    
-    # 备份 .claude 目录
-    if [ -d "$claude_dir" ]; then
-        print_info "发现现有 .claude 配置"
-        safe_mkdir "$backup_dir" 700
-        cp -r "$claude_dir" "$backup_dir/claude" 2>/dev/null || true
-        log_info "已备份 .claude 目录到 $backup_dir/claude"
-        has_backup=true
-    fi
-    
-    # 备份 .cc-config 目录
-    if [ -d "$cc_config_dir" ]; then
-        print_info "发现现有 .cc-config 配置"
-        if [ "$has_backup" = false ]; then
-            safe_mkdir "$backup_dir" 700
-        fi
-        cp -r "$cc_config_dir" "$backup_dir/cc-config" 2>/dev/null || true
-        log_info "已备份 .cc-config 目录到 $backup_dir/cc-config"
-        has_backup=true
-    fi
-    
-    if [ "$has_backup" = true ]; then
-        print_success "配置备份完成: $backup_dir"
-        
-        # 创建备份信息文件
-        cat > "$backup_dir/backup-info.txt" << EOF
-Claude Code Kit 配置备份
-备份时间: $(date)
-备份目录: $backup_dir
-安装版本: 1.0.0
-
-恢复方法:
-1. 停止所有 Claude Code 进程
-2. 删除当前配置: rm -rf ~/.claude ~/.cc-config
-3. 恢复备份: cp -r $backup_dir/claude ~/.claude && cp -r $backup_dir/cc-config ~/.cc-config
-EOF
-        
-        # 保留最近的5个备份
-        local backup_count=$(ls -1 "$backup_base" 2>/dev/null | wc -l)
-        if [ "$backup_count" -gt 5 ]; then
-            print_debug "清理旧备份，保留最近5个"
-            ls -1t "$backup_base" | tail -n +6 | while read -r old_backup; do
-                rm -rf "$backup_base/$old_backup" 2>/dev/null || true
-                log_info "已清理旧备份: $old_backup"
-            done
-        fi
-    else
-        print_info "未发现现有配置，跳过备份"
-    fi
-}
-
-# 部署配置模板
-deploy_config_templates() {
-    print_step "部署配置模板..."
-    
-    local claude_dir="$HOME/.claude"
-    local templates_dir="$INSTALL_DIR/.claude-templates"
-    
-    # 确保目标目录存在
-    safe_mkdir "$claude_dir" 700
-    
-    # 检查是否有模板文件
-    if [ ! -d "$templates_dir" ]; then
-        print_warning "未找到配置模板，跳过模板部署"
-        return 0
-    fi
-    
-    # 部署 settings.json
-    if [ -f "$templates_dir/settings.json" ]; then
-        if [ ! -f "$claude_dir/settings.json" ]; then
-            cp "$templates_dir/settings.json" "$claude_dir/settings.json"
-            chmod 600 "$claude_dir/settings.json"
-            print_success "已部署 settings.json 模板"
-        else
-            print_info "settings.json 已存在，跳过"
-        fi
-    fi
-    
-    # 部署 CLAUDE.md
-    if [ -f "$templates_dir/CLAUDE.md" ]; then
-        if [ ! -f "$claude_dir/CLAUDE.md" ]; then
-            cp "$templates_dir/CLAUDE.md" "$claude_dir/CLAUDE.md"
-            chmod 644 "$claude_dir/CLAUDE.md"
-            print_success "已部署 CLAUDE.md 模板"
-        else
-            print_info "CLAUDE.md 已存在，跳过"
-        fi
-    fi
-    
-    # 部署 commands 目录
-    if [ -d "$templates_dir/commands" ]; then
-        local commands_dir="$claude_dir/commands"
-        safe_mkdir "$commands_dir" 755
-        
-        cp -r "$templates_dir/commands/"* "$commands_dir/" 2>/dev/null || true
-        find "$commands_dir" -type f -name "*.js" -exec chmod 644 {} \;
-        print_success "已部署 commands 模板"
-    fi
-    
-    # 部署 agents 目录
-    if [ -d "$templates_dir/agents" ]; then
-        local agents_dir="$claude_dir/agents"
-        safe_mkdir "$agents_dir" 755
-        
-        cp -r "$templates_dir/agents/"* "$agents_dir/" 2>/dev/null || true
-        find "$agents_dir" -type f -name "*.md" -exec chmod 644 {} \;
-        print_success "已部署 agents 模板"
-    fi
-    
-    # 部署 output-styles 目录
-    if [ -d "$templates_dir/output-styles" ]; then
-        local styles_dir="$claude_dir/output-styles"
-        safe_mkdir "$styles_dir" 755
-        
-        cp -r "$templates_dir/output-styles/"* "$styles_dir/" 2>/dev/null || true
-        find "$styles_dir" -type f -name "*.json" -exec chmod 644 {} \;
-        print_success "已部署 output-styles 模板"
-    fi
-    
-    print_success "配置模板部署完成"
-}
-
-# 创建完整目录结构
-create_full_directory_structure() {
-    print_step "创建完整目录结构..."
-    
-    local claude_dir="$HOME/.claude"
-    local cc_config_dir="$HOME/.cc-config"
-    
-    # Claude Code 目录结构
-    local claude_subdirs=(
-        "commands"
-        "agents" 
-        "output-styles"
-        "projects"
-        "shell-snapshots"
-    )
-    
-    # CC Config 目录结构
-    local cc_config_subdirs=(
-        "providers"
-        "backups"
-        "logs"
-    )
-    
-    # 创建 .claude 子目录
-    for subdir in "${claude_subdirs[@]}"; do
-        safe_mkdir "$claude_dir/$subdir" 755
-        log_debug "创建目录: $claude_dir/$subdir"
-    done
-    
-    # 创建 .cc-config 子目录
-    for subdir in "${cc_config_subdirs[@]}"; do
-        safe_mkdir "$cc_config_dir/$subdir" 700
-        log_debug "创建目录: $cc_config_dir/$subdir"
-    done
-    
-    print_success "目录结构创建完成"
-}
-
-# 设置文件权限和验证
-setup_permissions_and_verify() {
-    print_step "设置文件权限和验证..."
-    
-    local claude_dir="$HOME/.claude"
-    local cc_config_dir="$HOME/.cc-config"
-    
-    # 设置 .claude 目录权限
-    if [ -d "$claude_dir" ]; then
-        chmod 700 "$claude_dir"
-        
-        # 设置敏感文件权限
-        [ -f "$claude_dir/settings.json" ] && chmod 600 "$claude_dir/settings.json"
-        
-        # 设置子目录权限
-        find "$claude_dir" -type d -exec chmod 755 {} \; 2>/dev/null || true
-        find "$claude_dir" -type f -name "*.json" -exec chmod 644 {} \; 2>/dev/null || true
-        find "$claude_dir" -type f -name "*.md" -exec chmod 644 {} \; 2>/dev/null || true
-        find "$claude_dir" -type f -name "*.js" -exec chmod 644 {} \; 2>/dev/null || true
-        
-        print_success "已设置 .claude 目录权限"
-    fi
-    
-    # 设置 .cc-config 目录权限
-    if [ -d "$cc_config_dir" ]; then
-        chmod 700 "$cc_config_dir"
-        find "$cc_config_dir" -type d -exec chmod 700 {} \; 2>/dev/null || true
-        find "$cc_config_dir" -type f -exec chmod 600 {} \; 2>/dev/null || true
-        
-        print_success "已设置 .cc-config 目录权限"
-    fi
-    
-    # 验证关键文件
-    local verification_errors=0
-    
-    # 验证必要目录
-    local required_dirs=(
-        "$claude_dir"
-        "$cc_config_dir"
-        "$cc_config_dir/providers"
-        "$cc_config_dir/backups"
-    )
-    
-    for dir in "${required_dirs[@]}"; do
-        if [ ! -d "$dir" ]; then
-            print_error "缺少必要目录: $dir"
-            verification_errors=$((verification_errors + 1))
-        else
-            log_debug "验证目录存在: $dir"
+# Cleanup function
+cleanup_temp_files() {
+    debug "Cleaning up temporary files..."
+    for file in "${TEMP_FILES[@]}"; do
+        if [ -f "$file" ] || [ -d "$file" ]; then
+            rm -rf "$file"
+            debug "Removed temporary file/directory: $file"
         fi
     done
-    
-    # 验证配置文件格式
-    if [ -f "$claude_dir/settings.json" ]; then
-        if command_exists node; then
-            if ! node -e "JSON.parse(require('fs').readFileSync('$claude_dir/settings.json', 'utf8'))" 2>/dev/null; then
-                print_error "settings.json 格式无效"
-                verification_errors=$((verification_errors + 1))
-            else
-                log_debug "settings.json 格式验证通过"
-            fi
-        fi
-    fi
-    
-    if [ "$verification_errors" -eq 0 ]; then
-        print_success "权限设置和验证完成"
-    else
-        print_error "验证过程中发现 $verification_errors 个错误"
-        return 1
-    fi
 }
 
-# 初始化配置
-initialize_config() {
-    print_step "初始化配置..."
-    
-    # 运行初始化命令
-    if "$BIN_DIR/$CLI_COMMAND" init 2>/dev/null; then
-        print_success "配置初始化完成"
-    else
-        print_warning "配置初始化失败，将在首次使用时自动初始化"
-    fi
-}
-
-# 配置 PATH 环境变量
-setup_path() {
-    print_step "配置环境变量..."
-    
-    local shell_name=$(basename "$SHELL")
-    local rc_file=""
-    
-    case $shell_name in
-        zsh)
-            rc_file="$HOME/.zshrc"
-            ;;
-        bash)
-            rc_file="$HOME/.bashrc"
-            ;;
-        *)
-            print_warning "不支持的 Shell: $shell_name，请手动添加 $BIN_DIR 到 PATH"
-            return 0
-            ;;
-    esac
-    
-    # 检查PATH是否已包含BIN_DIR
-    if echo "$PATH" | grep -q "$BIN_DIR"; then
-        print_info "PATH 已包含 $BIN_DIR"
-    else
-        # 添加 PATH
-        local path_line="export PATH=\"$BIN_DIR:\$PATH\""
+# Rollback function
+rollback_installation() {
+    if [ "$ROLLBACK_NEEDED" = true ] && [ -n "$BACKUP_CREATED" ]; then
+        warn "Rolling back installation..."
         
-        if ! grep -q "$path_line" "$rc_file" 2>/dev/null; then
-            echo "" >> "$rc_file"
-            echo "# Claude Code Kit" >> "$rc_file"
-            echo "$path_line" >> "$rc_file"
-            print_success "PATH 配置已添加到 $rc_file"
-        else
-            print_info "PATH 配置已存在"
+        # Restore from backup
+        if [ -d "$BACKUPS_DIR/$BACKUP_CREATED/claude" ]; then
+            rm -rf "$CLAUDE_CONFIG_DIR"
+            mv "$BACKUPS_DIR/$BACKUP_CREATED/claude" "$CLAUDE_CONFIG_DIR"
+            success "Configuration restored from backup"
+        fi
+        
+        # Remove incomplete cc-config directory
+        if [ "$INSTALLATION_STATE" != "completed" ]; then
+            rm -rf "$CLAUDE_CODE_KIT_DIR"
+            debug "Removed incomplete cc-config directory"
         fi
     fi
 }
 
-# 验证安装
-verify_installation() {
-    print_step "验证安装..."
+# Cleanup and exit function
+cleanup_and_exit() {
+    local exit_code=${1:-0}
     
-    # 检查命令是否可用
-    if command -v "$CLI_COMMAND" &> /dev/null; then
-        local version=$("$CLI_COMMAND" --version 2>/dev/null || echo "unknown")
-        print_success "命令验证成功: $CLI_COMMAND v$version"
-    else
-        print_warning "命令未找到，可能需要重新加载Shell配置"
-        print_info "请运行: export PATH=\"$BIN_DIR:\$PATH\""
+    debug "Starting cleanup process..."
+    
+    if [ $exit_code -ne 0 ]; then
+        rollback_installation
     fi
     
-    # 检查配置目录
-    if [ -d "$INSTALL_DIR" ]; then
-        print_success "配置目录验证成功: $INSTALL_DIR"
-    else
-        print_error "配置目录不存在"
-        exit 1
+    cleanup_temp_files
+    
+    if [ $exit_code -ne 0 ]; then
+        echo
+        error "Installation failed. Check log file: $LOG_FILE"
+        echo -e "${YELLOW}For support, please share the log file content.${NC}"
     fi
-}
-
-# 显示完成信息
-show_completion() {
-    echo ""
-    print_success "🎉 Claude Code Kit 安装完成！"
-    echo ""
-    print_info "📁 安装目录: $INSTALL_DIR"
-    print_info "🔧 命令工具: $CLI_COMMAND"
-    print_info "📋 配置目录: $HOME/.cc-config"
-    echo ""
-    print_message "$YELLOW" "📝 下一步操作:"
-    echo "  1. 重新加载Shell配置或重启终端"
-    echo "     source ~/.zshrc  (zsh)"
-    echo "     source ~/.bashrc (bash)"
-    echo ""
-    echo "  2. 查看帮助信息"
-    echo "     $CLI_COMMAND --help"
-    echo ""
-    echo "  3. 添加你的第一个服务商"
-    echo "     $CLI_COMMAND provider add"
-    echo ""
-    echo "  4. 生成和安装别名"
-    echo "     $CLI_COMMAND alias install"
-    echo ""
-    echo "  5. 部署配置模板 (可选)"
-    echo "     $CLI_COMMAND deploy --template external"
-    echo ""
-    print_message "$GREEN" "🎯 已安装的功能:"
-    echo "  • 配置模板系统 (settings.json, CLAUDE.md)"
-    echo "  • 智能命令系统 (/ask, /specs, /workflow)"
-    echo "  • 专业化Agent系统 (architect, backend-dev, frontend-dev)"
-    echo "  • 多样化输出样式 (concise, detailed, development)"
-    echo "  • 完整的配置管理和备份系统"
-    echo ""
-    print_message "$CYAN" "📚 更多信息:"
-    echo "  GitHub: $REPO_URL"
-    echo "  问题反馈: $REPO_URL/issues"
-    echo ""
-}
-
-# 错误处理和恢复
-handle_error() {
-    local exit_code=$?
-    local line_number=${BASH_LINENO[0]}
-    
-    log_error "安装失败，退出码: $exit_code，行号: $line_number"
-    
-    print_error "安装过程中发生错误 (行号: $line_number)"
-    echo ""
-    
-    print_info "🔍 错误诊断信息:"
-    if [ -f "$LOG_FILE" ]; then
-        echo "📄 详细日志: $LOG_FILE"
-        echo "📋 最近的日志条目:"
-        tail -10 "$LOG_FILE" | while IFS= read -r line; do
-            echo "   $line"
-        done
-    fi
-    
-    echo ""
-    print_info "🛠️  常见问题解决方案:"
-    echo "  1. 网络连接问题 - 检查网络连接和防火墙设置"
-    echo "  2. 权限问题 - 确保用户有写入权限"
-    echo "  3. Node.js版本 - 确保Node.js版本 >= $NODE_MIN_VERSION"
-    echo "  4. 磁盘空间 - 检查磁盘空间是否足够"
-    echo ""
-    
-    print_info "🔄 如果问题持续存在:"
-    echo "  1. 运行详细模式: VERBOSE=true bash install.sh"
-    echo "  2. 清理后重试: rm -rf '$INSTALL_DIR' && bash install.sh"
-    echo "  3. 手动安装: 查看项目 README.md"
-    echo "  4. 报告问题: $REPO_URL/issues"
-    echo ""
-    
-    # 尝试清理不完整的安装
-    cleanup_on_error
     
     exit $exit_code
 }
 
-# 错误清理函数
-cleanup_on_error() {
-    print_step "清理不完整的安装..."
-    
-    # 只清理明显有问题的文件，保留用户数据
-    if [ -d "$INSTALL_DIR/node_modules" ] && [ ! -f "$INSTALL_DIR/package.json" ]; then
-        log_warn "清理不完整的node_modules目录"
-        rm -rf "$INSTALL_DIR/node_modules" 2>/dev/null || true
-    fi
-    
-    # 移除可能的破损符号链接
-    if [ -L "$BIN_DIR/$CLI_COMMAND" ] && [ ! -e "$BIN_DIR/$CLI_COMMAND" ]; then
-        log_warn "清理破损的符号链接"
-        rm -f "$BIN_DIR/$CLI_COMMAND" 2>/dev/null || true
-    fi
-    
-    log_info "清理完成"
+# Trap for cleanup on exit or interrupt
+trap 'cleanup_and_exit $?' EXIT
+trap 'cleanup_and_exit 130' INT TERM
+
+# Check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
 }
 
-# 网络连接检查
-check_network() {
-    print_debug "检查网络连接..."
+# Check Node.js version with enhanced validation
+check_nodejs_version() {
+    info "Checking Node.js installation..."
     
-    local test_urls=(
-        "https://api.github.com"
-        "https://registry.npmjs.org"
-        "https://nodejs.org"
-    )
-    
-    for url in "${test_urls[@]}"; do
-        if execute_with_log "curl -s --max-time 10 '$url' >/dev/null" "" ""; then
-            log_debug "网络连接正常: $url"
-            return 0
-        fi
-    done
-    
-    print_warning "网络连接可能有问题，这可能影响安装过程"
-    log_warn "所有网络连接测试都失败了"
-    
-    echo ""
-    read -p "$(print_message "$YELLOW" "是否继续安装? [y/N]: ")" -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "安装已取消"
-        exit 0
+    if ! command_exists node; then
+        warn "Node.js not found. Installing Node.js $RECOMMENDED_NODE_VERSION..."
+        install_nodejs
+        return
     fi
-}
-
-# 磁盘空间检查
-check_disk_space() {
-    print_debug "检查磁盘空间..."
     
-    local required_mb=100  # 至少需要100MB
-    local available_mb
+    local current_version
+    current_version=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
     
-    if command_exists df; then
-        available_mb=$(df -m "$HOME" | awk 'NR==2 {print $4}')
-        if [ "$available_mb" -lt "$required_mb" ]; then
-            print_warning "磁盘空间不足，需要至少 ${required_mb}MB，当前可用 ${available_mb}MB"
-            log_warn "磁盘空间不足: 可用 ${available_mb}MB, 需要 ${required_mb}MB"
-            return 1
+    if [ -z "$current_version" ] || ! [[ "$current_version" =~ ^[0-9]+$ ]]; then
+        error "Unable to determine Node.js version. Please check your Node.js installation."
+    fi
+    
+    debug "Current Node.js version: $current_version, Required: $REQUIRED_NODE_VERSION"
+    
+    if [ "$current_version" -lt "$REQUIRED_NODE_VERSION" ]; then
+        warn "Node.js version $current_version is too old. Required: $REQUIRED_NODE_VERSION+"
+        
+        # Ask user before upgrading
+        echo -n "Would you like to install Node.js $RECOMMENDED_NODE_VERSION? (y/N): "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            install_nodejs
         else
-            log_debug "磁盘空间充足: ${available_mb}MB 可用"
+            error "Node.js $REQUIRED_NODE_VERSION+ is required to continue."
         fi
     else
-        log_debug "无法检查磁盘空间，df命令不可用"
+        success "Node.js version $(node --version) is compatible"
+        
+        # Check npm as well
+        if ! command_exists npm; then
+            error "npm is not available. Please reinstall Node.js."
+        fi
+        
+        local npm_version
+        npm_version=$(npm --version 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            debug "npm version: $npm_version"
+        else
+            warn "Unable to determine npm version"
+        fi
+    fi
+}
+
+# Install Node.js using NVM with enhanced error handling
+install_nodejs() {
+    info "Setting up Node.js installation..."
+    
+    # Create temp directory for NVM installation
+    local nvm_temp_dir="/tmp/nvm-install-$$"
+    add_temp_file "$nvm_temp_dir"
+    
+    if ! command_exists nvm; then
+        info "Installing NVM (Node Version Manager)..."
+        
+        # Check if curl or wget is available
+        if command_exists curl; then
+            curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh -o "$nvm_temp_dir.sh"
+        elif command_exists wget; then
+            wget -q https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh -O "$nvm_temp_dir.sh"
+        else
+            error "Neither curl nor wget is available. Cannot install NVM."
+        fi
+        
+        add_temp_file "$nvm_temp_dir.sh"
+        
+        # Verify download
+        if [ ! -f "$nvm_temp_dir.sh" ] || [ ! -s "$nvm_temp_dir.sh" ]; then
+            error "Failed to download NVM installation script"
+        fi
+        
+        # Run NVM installation
+        bash "$nvm_temp_dir.sh" || error "NVM installation failed"
+        
+        # Source NVM
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+        
+        # Verify NVM installation
+        if ! command_exists nvm; then
+            error "NVM installation verification failed"
+        fi
+        
+        success "NVM installed successfully"
+    else
+        debug "NVM already available"
     fi
     
-    return 0
+    info "Installing Node.js $RECOMMENDED_NODE_VERSION..."
+    
+    # Install Node.js with error handling
+    if ! nvm install "$RECOMMENDED_NODE_VERSION"; then
+        error "Failed to install Node.js $RECOMMENDED_NODE_VERSION"
+    fi
+    
+    if ! nvm use "$RECOMMENDED_NODE_VERSION"; then
+        error "Failed to activate Node.js $RECOMMENDED_NODE_VERSION"
+    fi
+    
+    if ! nvm alias default "$RECOMMENDED_NODE_VERSION"; then
+        warn "Failed to set default Node.js version, but installation continues"
+    fi
+    
+    # Verify installation
+    local installed_version
+    installed_version=$(node --version 2>/dev/null | sed 's/v//')
+    if [ -z "$installed_version" ]; then
+        error "Node.js installation verification failed"
+    fi
+    
+    success "Node.js $installed_version installed successfully"
+    debug "npm version: $(npm --version 2>/dev/null || echo 'unknown')"
 }
 
-# 命令行参数解析
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -v|--verbose)
-                VERBOSE=true
-                shift
-                ;;
-            -h|--help)
-                show_help
-                exit 0
-                ;;
-            --log-file)
-                LOG_FILE="$2"
-                shift 2
-                ;;
-            *)
-                print_error "未知参数: $1"
-                show_help
-                exit 1
-                ;;
-        esac
+# Install or update Claude Code CLI with enhanced error handling
+install_claude_code() {
+    info "Installing Claude Code CLI..."
+    INSTALLATION_STATE="installing_claude"
+    
+    # Check if npm is available and working
+    if ! npm --version >/dev/null 2>&1; then
+        error "npm is not working properly. Please check your Node.js installation."
+    fi
+    
+    # Check npm registry connectivity
+    info "Checking npm registry connectivity..."
+    if ! npm ping >/dev/null 2>&1; then
+        warn "Cannot reach npm registry. Continuing with cached packages if available..."
+    fi
+    
+    local install_attempts=0
+    local max_attempts=3
+    
+    while [ $install_attempts -lt $max_attempts ]; do
+        install_attempts=$((install_attempts + 1))
+        debug "Claude Code installation attempt $install_attempts of $max_attempts"
+        
+        if command_exists claude; then
+            info "Claude Code already installed. Checking for updates..."
+            
+            # Try update first
+            if npm update -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+                success "Claude Code updated successfully"
+                break
+            else
+                warn "Update failed. Attempting fresh installation..."
+                # Remove and reinstall
+                npm uninstall -g @anthropic-ai/claude-code >/dev/null 2>&1 || true
+            fi
+        fi
+        
+        # Install Claude Code
+        info "Installing Claude Code CLI (attempt $install_attempts)..."
+        if npm install -g @anthropic-ai/claude-code; then
+            success "Claude Code CLI installed successfully"
+            break
+        else
+            if [ $install_attempts -eq $max_attempts ]; then
+                error "Failed to install Claude Code CLI after $max_attempts attempts"
+            else
+                warn "Installation attempt $install_attempts failed. Retrying..."
+                sleep 2
+            fi
+        fi
     done
+    
+    # Verify installation
+    if command_exists claude; then
+        local claude_version
+        claude_version=$(claude --version 2>/dev/null || echo "unknown")
+        success "Claude Code CLI verified successfully"
+        info "Claude Code version: $claude_version"
+        debug "Claude Code location: $(which claude)"
+    else
+        error "Claude Code CLI installation verification failed"
+    fi
+    
+    INSTALLATION_STATE="claude_installed"
 }
 
-# 显示帮助信息
-show_help() {
-    echo "Claude Code Kit 安装脚本"
-    echo ""
-    echo "用法: bash install.sh [选项]"
-    echo ""
-    echo "选项:"
-    echo "  -v, --verbose     启用详细输出模式"
-    echo "  -h, --help        显示此帮助信息"
-    echo "  --log-file FILE   指定日志文件路径"
-    echo ""
-    echo "环境变量:"
-    echo "  VERBOSE=true      启用详细模式"
-    echo ""
-    echo "示例:"
-    echo "  bash install.sh"
-    echo "  VERBOSE=true bash install.sh"
-    echo "  bash install.sh --verbose --log-file /tmp/install.log"
+# Create backup of existing configuration with enhanced safety
+backup_existing_config() {
+    INSTALLATION_STATE="backing_up"
+    
+    if [ -d "$CLAUDE_CONFIG_DIR" ]; then
+        local timestamp
+        timestamp=$(date +"%Y%m%d_%H%M%S")
+        local backup_dir="$BACKUPS_DIR/$timestamp"
+        
+        info "Backing up existing Claude configuration..."
+        
+        # Ensure backup directory exists
+        if ! mkdir -p "$backup_dir"; then
+            error "Failed to create backup directory: $backup_dir"
+        fi
+        
+        # Calculate size before backup
+        local original_size
+        original_size=$(du -sh "$CLAUDE_CONFIG_DIR" 2>/dev/null | cut -f1 || echo "unknown")
+        
+        # Create backup with error checking
+        if ! cp -r "$CLAUDE_CONFIG_DIR" "$backup_dir/claude"; then
+            error "Failed to backup existing configuration"
+        fi
+        
+        # Verify backup integrity
+        if [ ! -d "$backup_dir/claude" ]; then
+            error "Backup verification failed - directory not created"
+        fi
+        
+        local backup_size
+        backup_size=$(du -sh "$backup_dir/claude" 2>/dev/null | cut -f1 || echo "unknown")
+        
+        # Record backup metadata with additional info
+        cat > "$backup_dir/metadata.json" << EOF
+{
+    "timestamp": "$timestamp",
+    "description": "Pre-installation backup",
+    "original_size": "$original_size",
+    "backup_size": "$backup_size",
+    "created_by": "install.sh v2.0.0",
+    "original_path": "$CLAUDE_CONFIG_DIR",
+    "backup_path": "$backup_dir/claude",
+    "files_count": $(find "$backup_dir/claude" -type f 2>/dev/null | wc -l || echo "unknown")
+}
+EOF
+        
+        # Set backup created flag for rollback
+        BACKUP_CREATED="$timestamp"
+        
+        success "Configuration backed up to $backup_dir"
+        debug "Backup size: $backup_size (original: $original_size)"
+        
+        # Update history file
+        local history_file="$BACKUPS_DIR/../history.json"
+        if [ -f "$history_file" ]; then
+            # Create temporary file for JSON manipulation
+            local temp_history="/tmp/history_temp_$$.json"
+            add_temp_file "$temp_history"
+            
+            # Add backup entry to history
+            jq --arg timestamp "$timestamp" \
+               --arg description "Pre-installation backup" \
+               --arg size "$backup_size" \
+               '.backups += [{"timestamp": $timestamp, "description": $description, "size": $size}]' \
+               "$history_file" > "$temp_history" 2>/dev/null && mv "$temp_history" "$history_file"
+        fi
+    else
+        debug "No existing Claude configuration found. Skipping backup."
+    fi
+    
+    INSTALLATION_STATE="backup_completed"
 }
 
-# 主安装流程
+# Deploy configuration templates
+deploy_configurations() {
+    info "Deploying configuration templates..."
+    
+    # Create directories
+    mkdir -p "$CLAUDE_CONFIG_DIR"
+    mkdir -p "$CLAUDE_CONFIG_DIR/commands"
+    mkdir -p "$CLAUDE_CONFIG_DIR/agents"
+    mkdir -p "$CLAUDE_CONFIG_DIR/output-styles"
+    
+    # Copy configuration templates from this repository
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    if [ -d "$script_dir/.claude" ]; then
+        cp -r "$script_dir/.claude"/* "$CLAUDE_CONFIG_DIR/"
+        success "Configuration templates deployed successfully"
+    else
+        warn "Configuration templates not found in $script_dir/.claude"
+        warn "Creating minimal configuration..."
+        create_minimal_config
+    fi
+}
+
+# Create minimal configuration if templates are not available
+create_minimal_config() {
+    # Create basic settings.json
+    cat > "$CLAUDE_CONFIG_DIR/settings.json" << 'EOF'
+{
+    "name": "Claude Code Kit Configuration",
+    "description": "Basic configuration for Claude Code",
+    "version": "1.0.0",
+    "apiSettings": {
+        "timeout": 3000000
+    }
+}
+EOF
+
+    # Create basic CLAUDE.md
+    cat > "$CLAUDE_CONFIG_DIR/CLAUDE.md" << 'EOF'
+# Claude Code Configuration
+
+This is a basic configuration for Claude Code.
+
+## Environment Variables
+- `ANTHROPIC_API_KEY`: Your API key
+- `ANTHROPIC_BASE_URL`: API base URL (optional)
+EOF
+
+    success "Minimal configuration created"
+}
+
+# Setup Claude Code Kit directories
+setup_cc_config_directory() {
+    info "Setting up Claude Code Kit directories..."
+    
+    mkdir -p "$CLAUDE_CODE_KIT_DIR"
+    mkdir -p "$PROVIDERS_DIR"
+    mkdir -p "$BACKUPS_DIR"
+    
+    # Create history file
+    cat > "$CLAUDE_CODE_KIT_DIR/history.json" << EOF
+{
+    "version": "1.0",
+    "backups": []
+}
+EOF
+    
+    success "Claude Code Kit directories created"
+}
+
+# Configure default provider
+configure_default_provider() {
+    info "Configuring default provider..."
+    
+    echo
+    echo "Please provide your Anthropic API configuration:"
+    
+    # Get API Key
+    while true; do
+        echo -n "API Key: "
+        read -s api_key
+        echo
+        
+        if [ -n "$api_key" ]; then
+            break
+        else
+            warn "API Key cannot be empty. Please try again."
+        fi
+    done
+    
+    # Get Base URL (optional)
+    echo -n "Base URL (press Enter for default: https://api.anthropic.com): "
+    read base_url
+    
+    if [ -z "$base_url" ]; then
+        base_url="https://api.anthropic.com"
+    fi
+    
+    # Create default provider configuration
+    cat > "$PROVIDERS_DIR/default.json" << EOF
+{
+    "alias": "claude",
+    "baseURL": "$base_url",
+    "apiKey": "$api_key",
+    "timeout": "3000000"
+}
+EOF
+    
+    success "Default provider configured"
+}
+
+# Ask about additional provider
+configure_additional_provider() {
+    echo
+    echo -n "Would you like to add an additional provider? (y/N): "
+    read -r add_provider
+    
+    if [[ "$add_provider" =~ ^[Yy]$ ]]; then
+        echo -n "Provider alias (e.g., 'cc'): "
+        read alias
+        
+        echo -n "API Key: "
+        read -s api_key
+        echo
+        
+        echo -n "Base URL: "
+        read base_url
+        
+        if [ -n "$alias" ] && [ -n "$api_key" ] && [ -n "$base_url" ]; then
+            cat > "$PROVIDERS_DIR/$alias.json" << EOF
+{
+    "alias": "$alias",
+    "baseURL": "$base_url", 
+    "apiKey": "$api_key",
+    "timeout": "3000000"
+}
+EOF
+            success "Additional provider '$alias' configured"
+        else
+            warn "Skipping additional provider due to missing information"
+        fi
+    fi
+}
+
+# Generate shell aliases
+generate_aliases() {
+    info "Generating shell aliases..."
+    
+    cat > "$ALIASES_FILE" << 'EOF'
+# Claude Code Kit - Auto-generated aliases
+# This file is automatically generated. Do not edit manually.
+
+_load_claude_config() {
+    local config_file="$1"
+    if [ -f "$config_file" ]; then
+        export ANTHROPIC_AUTH_TOKEN=$(jq -r ".apiKey" "$config_file")
+        export ANTHROPIC_BASE_URL=$(jq -r ".baseURL" "$config_file")
+        export API_TIMEOUT_MS=$(jq -r ".timeout // \"3000000\"" "$config_file")
+    fi
+}
+
+EOF
+    
+    # Add aliases for each provider
+    for provider_file in "$PROVIDERS_DIR"/*.json; do
+        if [ -f "$provider_file" ]; then
+            local alias_name
+            alias_name=$(jq -r ".alias" "$provider_file")
+            echo "alias $alias_name='_load_claude_config \"$provider_file\" && claude'" >> "$ALIASES_FILE"
+        fi
+    done
+    
+    success "Shell aliases generated"
+}
+
+# Detect shell type
+detect_shell() {
+    if [ -n "${ZSH_VERSION:-}" ]; then
+        echo "zsh"
+    elif [ -n "${BASH_VERSION:-}" ]; then
+        echo "bash"
+    else
+        echo "unknown"
+    fi
+}
+
+# Setup shell integration
+setup_shell_integration() {
+    local shell_type
+    shell_type=$(detect_shell)
+    
+    info "Setting up shell integration for $shell_type..."
+    
+    local shell_config
+    case "$shell_type" in
+        "zsh")
+            shell_config="$HOME/.zshrc"
+            ;;
+        "bash")
+            shell_config="$HOME/.bashrc"
+            ;;
+        *)
+            warn "Unknown shell type. Please manually add the following to your shell configuration:"
+            echo "source $ALIASES_FILE"
+            return
+            ;;
+    esac
+    
+    # Check if aliases are already sourced
+    if ! grep -q "source $ALIASES_FILE" "$shell_config" 2>/dev/null; then
+        echo "" >> "$shell_config"
+        echo "# Claude Code Kit aliases" >> "$shell_config"
+        echo "source $ALIASES_FILE" >> "$shell_config"
+        success "Shell integration added to $shell_config"
+    else
+        info "Shell integration already exists in $shell_config"
+    fi
+}
+
+# Install cc-config tool
+install_cc_config_tool() {
+    info "Installing cc-config tool..."
+    
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    # Install Node.js dependencies if package.json exists
+    if [ -f "$script_dir/package.json" ]; then
+        cd "$script_dir"
+        npm install
+        
+        # Create global symlink for cc-config
+        npm link
+        success "cc-config tool installed globally"
+    else
+        warn "cc-config tool not available in this installation"
+    fi
+}
+
+# Check system dependencies with enhanced detection and installation
+check_dependencies() {
+    info "Checking system dependencies..."
+    local missing_deps=()
+    local optional_missing=()
+    
+    # Critical dependencies
+    if ! command_exists curl && ! command_exists wget; then
+        missing_deps+=("curl or wget")
+    fi
+    
+    # Check for package managers (for jq installation)
+    local package_manager=""
+    if command_exists brew; then
+        package_manager="brew"
+    elif command_exists apt-get; then
+        package_manager="apt-get"
+    elif command_exists yum; then
+        package_manager="yum"
+    elif command_exists dnf; then
+        package_manager="dnf"
+    elif command_exists zypper; then
+        package_manager="zypper"
+    elif command_exists pacman; then
+        package_manager="pacman"
+    fi
+    
+    # Check for jq
+    if ! command_exists jq; then
+        if [ -n "$package_manager" ]; then
+            info "Installing jq for JSON processing using $package_manager..."
+            
+            case "$package_manager" in
+                "brew")
+                    brew install jq || optional_missing+=("jq")
+                    ;;
+                "apt-get")
+                    sudo apt-get update && sudo apt-get install -y jq || optional_missing+=("jq")
+                    ;;
+                "yum")
+                    sudo yum install -y jq || optional_missing+=("jq")
+                    ;;
+                "dnf")
+                    sudo dnf install -y jq || optional_missing+=("jq")
+                    ;;
+                "zypper")
+                    sudo zypper install -y jq || optional_missing+=("jq")
+                    ;;
+                "pacman")
+                    sudo pacman -S --noconfirm jq || optional_missing+=("jq")
+                    ;;
+            esac
+        else
+            optional_missing+=("jq")
+        fi
+    fi
+    
+    # Check other useful tools
+    if ! command_exists git; then
+        debug "Git not found - some features may be limited"
+    fi
+    
+    # Report missing critical dependencies
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        error "Missing critical dependencies: ${missing_deps[*]}"
+    fi
+    
+    # Report missing optional dependencies
+    if [ ${#optional_missing[@]} -gt 0 ]; then
+        warn "Missing optional dependencies: ${optional_missing[*]}"
+        warn "Some features may not work properly. Please install them manually."
+    fi
+    
+    # Check write permissions
+    local test_dirs=("$HOME" "/tmp")
+    for dir in "${test_dirs[@]}"; do
+        if [ ! -w "$dir" ]; then
+            error "No write permission to $dir. Please check your permissions."
+        fi
+    done
+    
+    # Check disk space (at least 100MB)
+    local available_space
+    if command_exists df; then
+        available_space=$(df "$HOME" | awk 'NR==2 {print $4}')
+        if [ "$available_space" -lt 102400 ]; then  # 100MB in KB
+            warn "Low disk space detected. At least 100MB free space is recommended."
+        fi
+    fi
+    
+    success "System dependencies check completed"
+}
+
+# Main installation function
 main() {
-    # 解析命令行参数
-    parse_args "$@"
+    echo "=================================================="
+    echo "      Claude Code Kit Installation Script"
+    echo "=================================================="
+    echo
     
-    # 设置错误处理
-    trap handle_error ERR
-    set -eE  # 启用错误退出和ERR陷阱继承
+    info "Starting Claude Code Kit installation..."
     
-    show_welcome
-    check_network
-    check_disk_space
-    check_system
-    check_nodejs
+    # Check dependencies first
+    check_dependencies
+    
+    # Main installation steps
+    check_nodejs_version
+    install_claude_code
+    setup_cc_config_directory
     backup_existing_config
-    create_directories
-    install_application
-    create_full_directory_structure
-    deploy_config_templates
-    setup_permissions_and_verify
-    initialize_config
-    setup_path
-    verify_installation
-    show_completion
+    deploy_configurations
+    configure_default_provider
+    configure_additional_provider
+    generate_aliases
+    setup_shell_integration
+    install_cc_config_tool
     
-    # 安装成功日志
-    log_info "=== 安装成功完成 ==="
+    echo
+    echo "=================================================="
+    success "Claude Code Kit installation completed!"
+    echo "=================================================="
+    echo
+    info "Next steps:"
+    echo "  1. Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)"
+    echo "  2. Test installation: claude --version"
+    echo "  3. Use your configured aliases (e.g., 'claude \"Hello\"')"
+    echo "  4. Manage providers with: cc-config provider list"
+    echo
+    info "For help and documentation, visit:"
+    echo "  https://github.com/kedoupi/claude-code-kit"
+    echo
 }
 
-# 运行主程序
-main "$@"
+# Run main function if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

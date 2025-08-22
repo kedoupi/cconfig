@@ -1,8 +1,32 @@
+# Dependencies
 node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
 dist/
 build/
 coverage/
-*.md
-*.json
-.git/
+
+# Generated files
+*.min.js
+*.min.css
+
+# Test artifacts
+test-results/
+*.test.json
+
+# Logs
+*.log
+
+# IDE files
 .vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp

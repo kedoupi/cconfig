@@ -1,430 +1,405 @@
+/**
+ * AliasGenerator Unit Tests
+ */
+
 const AliasGenerator = require('../../../src/core/AliasGenerator');
-const ConfigStorage = require('../../../src/core/ConfigStorage');
+const testUtils = require('../../helpers/testUtils');
 const fs = require('fs-extra');
 const path = require('path');
-const os = require('os');
-const { createTempDir, cleanupTempDir } = require('../../helpers/testUtils');
 
 describe('AliasGenerator', () => {
-  let tempDir;
-  let configStorage;
   let aliasGenerator;
-  let originalHome;
+  let testConfigDir;
+  let providersDir;
+  let aliasesFile;
 
   beforeEach(async () => {
-    tempDir = await createTempDir();
-    originalHome = process.env.HOME;
-    process.env.HOME = tempDir;
-
-    configStorage = new ConfigStorage({
-      baseDir: path.join(tempDir, '.cc-config'),
-    });
-    
-    aliasGenerator = new AliasGenerator(configStorage);
-
-    // Mock console methods
-    jest.spyOn(console, 'log').mockImplementation();
-    jest.spyOn(console, 'error').mockImplementation();
+    testConfigDir = await testUtils.createTempDir('alias-generator-test');
+    providersDir = path.join(testConfigDir, 'providers');
+    aliasesFile = path.join(testConfigDir, 'aliases.sh');
+    await fs.ensureDir(providersDir);
+    aliasGenerator = new AliasGenerator(testConfigDir);
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
-    await cleanupTempDir(tempDir);
-    jest.restoreAllMocks();
+    await testUtils.cleanupTempDirs();
   });
 
-  describe('constructor', () => {
-    test('应该正确初始化 AliasGenerator', () => {
-      expect(aliasGenerator.configStorage).toBe(configStorage);
-      expect(aliasGenerator.aliasesFile).toBe(path.join(tempDir, '.cc-config', 'aliases.sh'));
-      expect(aliasGenerator.sourceCommand).toBe('source ~/.cc-config/aliases.sh');
+  describe('loadProviders', () => {
+    it('should return empty array when no providers exist', async () => {
+      const providers = await aliasGenerator.loadProviders();
+      expect(providers).toEqual([]);
     });
 
-    test('应该设置正确的 Shell 配置文件路径', () => {
-      expect(aliasGenerator.profileFiles.bash).toBe(path.join(tempDir, '.bashrc'));
-      expect(aliasGenerator.profileFiles.zsh).toBe(path.join(tempDir, '.zshrc'));
-      expect(aliasGenerator.profileFiles.fish).toBe(path.join(tempDir, '.config', 'fish', 'config.fish'));
-    });
-  });
-
-  describe('detectShell', () => {
-    test('应该检测 zsh', () => {
-      process.env.SHELL = '/bin/zsh';
-      expect(aliasGenerator.detectShell()).toBe('zsh');
-    });
-
-    test('应该检测 bash', () => {
-      process.env.SHELL = '/bin/bash';
-      expect(aliasGenerator.detectShell()).toBe('bash');
-    });
-
-    test('应该检测 fish', () => {
-      process.env.SHELL = '/usr/bin/fish';
-      expect(aliasGenerator.detectShell()).toBe('fish');
-    });
-
-    test('应该默认返回 bash', () => {
-      process.env.SHELL = '/unknown/shell';
-      expect(aliasGenerator.detectShell()).toBe('bash');
-    });
-  });
-
-  describe('sanitizeAlias', () => {
-    test('应该清理无效字符', () => {
-      expect(aliasGenerator.sanitizeAlias('test@#$')).toBe('test');
-      expect(aliasGenerator.sanitizeAlias('test-name_123')).toBe('test-name_123');
-      expect(aliasGenerator.sanitizeAlias('test spaces')).toBe('testspaces');
-    });
-  });
-
-  describe('generateHeader', () => {
-    test('应该生成包含版本信息的头部', () => {
-      const header = aliasGenerator.generateHeader();
+    it('should load all provider configurations', async () => {
+      const testProviders = testUtils.createTestProviders(3);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
       
-      expect(header).toContain('#!/bin/bash');
-      expect(header).toContain('Claude Code Kit - 自动生成的别名配置');
-      expect(header).toContain('生成时间:');
-      expect(header).toContain('使用方法：');
-      expect(header).toContain('管理命令：');
+      const providers = await aliasGenerator.loadProviders();
+      expect(providers).toHaveLength(3);
+      expect(providers).toEqual(expect.arrayContaining(testProviders));
     });
-  });
 
-  describe('generateHelperFunction', () => {
-    test('应该生成配置加载辅助函数', () => {
-      const helpers = aliasGenerator.generateHelperFunction();
-      
-      expect(helpers).toContain('_cc_load_config()');
-      expect(helpers).toContain('_cc_show_config()');
-      expect(helpers).toContain('_cc_test_config()');
-      expect(helpers).toContain('_cc_reload_aliases()');
-      expect(helpers).toContain('cc-config provider get');
-    });
-  });
-
-  describe('generateFooter', () => {
-    test('应该生成脚本尾部', () => {
-      const footer = aliasGenerator.generateFooter();
-      
-      expect(footer).toContain('脚本完成标记');
-      expect(footer).toContain('CC_ALIASES_LOADED');
-      expect(footer).toContain('Claude Code Kit 别名已加载');
-    });
-  });
-
-  describe('generateEmptyScript', () => {
-    test('应该生成空脚本框架', () => {
-      const script = aliasGenerator.generateEmptyScript();
-      
-      expect(script).toContain('#!/bin/bash');
-      expect(script).toContain('暂无启用的服务商配置');
-      expect(script).toContain('cc-config provider add');
-      expect(script).toContain('CC_ALIASES_LOADED');
-    });
-  });
-
-  describe('generateAliasCommands', () => {
-    test('应该为服务商生成别名命令', () => {
-      const providers = [
-        ['claude', {
-          alias: 'claude',
-          baseURL: 'https://api.anthropic.com',
-          description: 'Anthropic Claude API',
-          enabled: true,
-        }],
-        ['openai', {
-          alias: 'gpt',
-          baseURL: 'https://api.openai.com',
-          description: 'OpenAI GPT API',
-          enabled: true,
-        }],
+    it('should sort providers by alias', async () => {
+      const testProviders = [
+        testUtils.createTestProvider({ alias: 'zulu' }),
+        testUtils.createTestProvider({ alias: 'alpha' }),
+        testUtils.createTestProvider({ alias: 'bravo' })
       ];
-
-      const aliases = aliasGenerator.generateAliasCommands(providers);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
       
-      expect(aliases).toContain('alias claude=');
-      expect(aliases).toContain('alias claude-info=');
-      expect(aliases).toContain('alias claude-test=');
-      expect(aliases).toContain('alias gpt=');
-      expect(aliases).toContain('alias gpt-info=');
-      expect(aliases).toContain('alias gpt-test=');
-      
-      expect(aliases).toContain('管理命令别名');
-      expect(aliases).toContain('cc-providers');
-      expect(aliases).toContain('cc-reload');
-      expect(aliases).toContain('cc-help');
-    });
-  });
-
-  describe('writeAliasFile', () => {
-    test('应该写入别名文件并设置权限', async () => {
-      const content = 'test content';
-      
-      await aliasGenerator.writeAliasFile(content);
-      
-      expect(await fs.pathExists(aliasGenerator.aliasesFile)).toBe(true);
-      
-      const fileContent = await fs.readFile(aliasGenerator.aliasesFile, 'utf8');
-      expect(fileContent).toBe(content);
-      
-      const stats = await fs.stat(aliasGenerator.aliasesFile);
-      expect(stats.mode & parseInt('777', 8)).toBe(parseInt('755', 8));
-    });
-  });
-
-  describe('getAllShellConfigFiles', () => {
-    test('应该返回存在的 Shell 配置文件', async () => {
-      // 创建一些配置文件
-      await fs.ensureFile(path.join(tempDir, '.bashrc'));
-      await fs.ensureFile(path.join(tempDir, '.zshrc'));
-      
-      const files = aliasGenerator.getAllShellConfigFiles();
-      
-      expect(files).toHaveLength(2);
-      expect(files.some(f => f.shell === 'bash')).toBe(true);
-      expect(files.some(f => f.shell === 'zsh')).toBe(true);
-    });
-  });
-
-  describe('updateSingleShellConfig', () => {
-    test('应该向 Shell 配置文件添加 source 命令', async () => {
-      const configFile = path.join(tempDir, '.bashrc');
-      await fs.writeFile(configFile, 'export PATH=$PATH:/usr/local/bin\n');
-      
-      const result = await aliasGenerator.updateSingleShellConfig('bash', configFile);
-      
-      expect(result.updated).toBe(true);
-      expect(result.message).toContain('已更新 bash 配置文件');
-      
-      const content = await fs.readFile(configFile, 'utf8');
-      expect(content).toContain('Claude Code Kit 别名配置');
-      expect(content).toContain('source ~/.cc-config/aliases.sh');
+      const providers = await aliasGenerator.loadProviders();
+      expect(providers[0].alias).toBe('alpha');
+      expect(providers[1].alias).toBe('bravo');
+      expect(providers[2].alias).toBe('zulu');
     });
 
-    test('应该检测已存在的配置', async () => {
-      const configFile = path.join(tempDir, '.bashrc');
-      await fs.writeFile(configFile, `
-export PATH=$PATH:/usr/local/bin
-
-# Claude Code Kit 别名配置
-source ~/.cc-config/aliases.sh
-`);
+    it('should skip non-JSON files', async () => {
+      await fs.writeFile(path.join(providersDir, 'readme.txt'), 'Not a provider');
+      const testProvider = testUtils.createTestProvider();
+      await testUtils.createTestProviderFiles(providersDir, [testProvider]);
       
-      const result = await aliasGenerator.updateSingleShellConfig('bash', configFile, false);
-      
-      expect(result.updated).toBe(false);
-      expect(result.message).toContain('bash 配置已存在');
+      const providers = await aliasGenerator.loadProviders();
+      expect(providers).toHaveLength(1);
+      expect(providers[0]).toEqual(testProvider);
     });
 
-    test('应该在强制模式下更新已存在的配置', async () => {
-      const configFile = path.join(tempDir, '.bashrc');
-      await fs.writeFile(configFile, `
-export PATH=$PATH:/usr/local/bin
-
-# Claude Code Kit 别名配置
-source ~/.cc-config/aliases.sh
-`);
+    it('should handle corrupted JSON files gracefully', async () => {
+      await fs.writeFile(path.join(providersDir, 'corrupted.json'), 'invalid json');
+      const testProvider = testUtils.createTestProvider();
+      await testUtils.createTestProviderFiles(providersDir, [testProvider]);
       
-      const result = await aliasGenerator.updateSingleShellConfig('bash', configFile, true);
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
       
-      expect(result.updated).toBe(true);
-      expect(result.message).toContain('已更新 bash 配置文件');
-    });
-  });
-
-  describe('removeSingleShellConfig', () => {
-    test('应该从 Shell 配置文件中移除相关配置', async () => {
-      const configFile = path.join(tempDir, '.bashrc');
-      await fs.writeFile(configFile, `
-export PATH=$PATH:/usr/local/bin
-
-# Claude Code Kit 别名配置
-# 自动生成于: 2023-01-01 12:00:00
-source ~/.cc-config/aliases.sh
-
-export EDITOR=vim
-`);
+      const providers = await aliasGenerator.loadProviders();
+      expect(providers).toHaveLength(1);
+      expect(consoleSpy).toHaveBeenCalled();
       
-      const result = await aliasGenerator.removeSingleShellConfig('bash', configFile);
-      
-      expect(result.removed).toBe(true);
-      expect(result.message).toContain('已从 bash 配置文件中移除相关配置');
-      
-      const content = await fs.readFile(configFile, 'utf8');
-      expect(content).not.toContain('Claude Code Kit 别名配置');
-      expect(content).not.toContain('source ~/.cc-config/aliases.sh');
-      expect(content).toContain('export PATH=$PATH:/usr/local/bin');
-      expect(content).toContain('export EDITOR=vim');
+      consoleSpy.mockRestore();
     });
 
-    test('应该处理不存在相关配置的情况', async () => {
-      const configFile = path.join(tempDir, '.bashrc');
-      await fs.writeFile(configFile, 'export PATH=$PATH:/usr/local/bin\n');
+    it('should handle non-existent providers directory', async () => {
+      await fs.remove(providersDir);
       
-      const result = await aliasGenerator.removeSingleShellConfig('bash', configFile);
-      
-      expect(result.removed).toBe(false);
-      expect(result.message).toContain('bash 配置中未找到相关配置');
-    });
-  });
-
-  describe('validateAliases', () => {
-    test('应该验证别名配置并返回问题报告', async () => {
-      // 准备测试数据
-      await configStorage.initialize();
-      
-      // 添加一些测试服务商
-      await configStorage.writeProvider('test1', {
-        alias: 'test1',
-        baseURL: 'https://api.test1.com',
-        apiKey: 'test-key-1',
-        enabled: true,
-      });
-      
-      await configStorage.writeProvider('test2', {
-        alias: 'test1', // 重复别名
-        baseURL: 'https://api.test2.com',
-        apiKey: 'test-key-2',
-        enabled: true,
-      });
-      
-      await configStorage.writeProvider('test3', {
-        alias: 'ls', // 与系统命令冲突
-        baseURL: 'https://api.test3.com',
-        apiKey: 'test-key-3',
-        enabled: true,
-      });
-      
-      const validation = await aliasGenerator.validateAliases();
-      
-      expect(validation.valid).toBe(false);
-      expect(validation.issues).toHaveLength(3); // 重复别名 + 系统冲突 + 缺少别名文件
-      
-      const duplicateIssue = validation.issues.find(i => i.type === 'duplicate_alias');
-      expect(duplicateIssue).toBeDefined();
-      expect(duplicateIssue.severity).toBe('error');
-      
-      const conflictIssue = validation.issues.find(i => i.type === 'system_conflict');
-      expect(conflictIssue).toBeDefined();
-      expect(conflictIssue.severity).toBe('warning');
-      
-      expect(validation.summary.total).toBe(3);
-      expect(validation.summary.enabled).toBe(3);
-      expect(validation.summary.aliasCount).toBe(3);
+      const providers = await aliasGenerator.loadProviders();
+      expect(providers).toEqual([]);
     });
   });
 
   describe('generateAliases', () => {
-    test('应该生成完整的别名脚本', async () => {
-      // 准备测试数据
-      await configStorage.initialize();
+    it('should create aliases file', async () => {
+      const testProviders = testUtils.createTestProviders(2);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
       
-      await configStorage.writeProvider('claude', {
-        alias: 'claude',
-        baseURL: 'https://api.anthropic.com',
-        apiKey: 'test-key',
-        description: 'Anthropic Claude API',
-        enabled: true,
-      });
+      await aliasGenerator.generateAliases();
       
-      const script = await aliasGenerator.generateAliases();
+      expect(await fs.pathExists(aliasesFile)).toBe(true);
       
-      expect(script).toContain('#!/bin/bash');
-      expect(script).toContain('Claude Code Kit - 自动生成的别名配置');
-      expect(script).toContain('_cc_load_config()');
-      expect(script).toContain('alias claude=');
-      expect(script).toContain('alias claude-info=');
-      expect(script).toContain('alias claude-test=');
-      expect(script).toContain('CC_ALIASES_LOADED');
-      
-      // 验证文件已写入
-      expect(await fs.pathExists(aliasGenerator.aliasesFile)).toBe(true);
+      const content = await fs.readFile(aliasesFile, 'utf8');
+      expect(content).toContain('# Claude Code Kit - Auto-generated aliases');
+      expect(content).toContain('_cc_load_config');
+      expect(content).toContain(`alias ${testProviders[0].alias}=`);
+      expect(content).toContain(`alias ${testProviders[1].alias}=`);
     });
 
-    test('应该为空的服务商列表生成空脚本', async () => {
-      await configStorage.initialize();
+    it('should generate aliases for all providers', async () => {
+      const testProviders = testUtils.createTestProviders(3);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
       
-      const script = await aliasGenerator.generateAliases();
+      await aliasGenerator.generateAliases();
       
-      expect(script).toContain('暂无启用的服务商配置');
-      expect(script).toContain('cc-config provider add');
+      const content = await fs.readFile(aliasesFile, 'utf8');
+      
+      testProviders.forEach(provider => {
+        expect(content).toContain(`alias ${provider.alias}=`);
+      });
+    });
+
+    it('should handle empty providers directory', async () => {
+      await aliasGenerator.generateAliases();
+      
+      const content = await fs.readFile(aliasesFile, 'utf8');
+      expect(content).toContain('# No providers configured yet');
+      expect(content).toContain('cc-config provider add');
     });
   });
 
-  describe('getAliasStats', () => {
-    test('应该返回详细的别名统计信息', async () => {
-      // 准备测试数据
-      await configStorage.initialize();
+  describe('buildAliasContent', () => {
+    it('should build complete alias content', () => {
+      const testProviders = testUtils.createTestProviders(2);
+      const content = aliasGenerator.buildAliasContent(testProviders);
       
-      await configStorage.writeProvider('claude', {
-        alias: 'claude',
-        baseURL: 'https://api.anthropic.com',
-        apiKey: 'test-key',
-        enabled: true,
+      expect(content).toContain('# Claude Code Kit - Auto-generated aliases');
+      expect(content).toContain('_cc_load_config()');
+      expect(content).toContain('_cc_check_claude_cli()');
+      expect(content).toContain('claude-providers()');
+      expect(content).toContain('claude-reload()');
+      
+      testProviders.forEach(provider => {
+        expect(content).toContain(`alias ${provider.alias}=`);
       });
+    });
+
+    it('should include provider statistics in footer', () => {
+      const testProviders = testUtils.createTestProviders(3);
+      const content = aliasGenerator.buildAliasContent(testProviders);
       
-      await configStorage.writeProvider('gpt', {
-        alias: 'gpt',
-        baseURL: 'https://api.openai.com',
-        apiKey: 'test-key',
-        enabled: false,
+      expect(content).toContain('Total providers configured: 3');
+      testProviders.forEach(provider => {
+        expect(content).toContain(`${provider.alias}: ${provider.baseURL}`);
       });
+    });
+
+    it('should include usage examples', () => {
+      const testProviders = testUtils.createTestProviders(1);
+      const content = aliasGenerator.buildAliasContent(testProviders);
       
-      const stats = await aliasGenerator.getAliasStats();
-      
-      expect(stats.total).toBe(2);
-      expect(stats.enabled).toBe(1);
-      expect(stats.disabled).toBe(1);
-      expect(stats.withApiKeys).toBe(2);
-      expect(stats.aliases).toHaveLength(2);
-      expect(stats.validation).toBeDefined();
-      expect(stats.shell.current).toBeDefined();
+      expect(content).toContain('Usage:');
+      expect(content).toContain('Example:');
+      expect(content).toContain(testProviders[0].alias);
     });
   });
 
-  describe('cleanupAliases', () => {
-    test('应该清理别名文件和 Shell 配置', async () => {
-      // 创建别名文件
-      await fs.writeFile(aliasGenerator.aliasesFile, 'test content');
+  describe('generateHeader', () => {
+    it('should generate file header with timestamp', () => {
+      const header = aliasGenerator.generateHeader();
       
-      // 创建 Shell 配置
-      const bashConfig = path.join(tempDir, '.bashrc');
-      await fs.writeFile(bashConfig, `
-export PATH=$PATH:/usr/local/bin
-
-# Claude Code Kit 别名配置
-source ~/.cc-config/aliases.sh
-`);
-      
-      const result = await aliasGenerator.cleanupAliases();
-      
-      expect(result.success).toBe(true);
-      expect(result.cleaned).toBe(true);
-      expect(result.details.aliasFile).toBe(true);
-      
-      expect(await fs.pathExists(aliasGenerator.aliasesFile)).toBe(false);
-      
-      const content = await fs.readFile(bashConfig, 'utf8');
-      expect(content).not.toContain('Claude Code Kit 别名配置');
+      expect(header).toContain('# Claude Code Kit - Auto-generated aliases');
+      expect(header).toContain('# This file is automatically generated');
+      expect(header).toContain('# Generated on:');
+      expect(header).toContain('# Usage:');
+      expect(header).toContain('# Example:');
     });
   });
 
-  describe('getInstallStatus', () => {
-    test('应该返回完整的安装状态', async () => {
-      // 创建别名文件
-      await fs.writeFile(aliasGenerator.aliasesFile, 'test content');
+  describe('generateHelperFunctions', () => {
+    it('should generate helper functions', () => {
+      const helpers = aliasGenerator.generateHelperFunctions();
       
-      // 创建部分 Shell 配置
-      await fs.writeFile(path.join(tempDir, '.bashrc'), 'export PATH=$PATH:/usr/local/bin\n');
+      expect(helpers).toContain('_cc_load_config()');
+      expect(helpers).toContain('_cc_check_claude_cli()');
+      expect(helpers).toContain('jq -r ".apiKey // empty"');
+      expect(helpers).toContain('ANTHROPIC_AUTH_TOKEN');
+      expect(helpers).toContain('ANTHROPIC_BASE_URL');
+    });
+
+    it('should include error handling', () => {
+      const helpers = aliasGenerator.generateHelperFunctions();
       
-      const status = await aliasGenerator.getInstallStatus();
+      expect(helpers).toContain('if [ ! -f "$config_file" ]');
+      expect(helpers).toContain('if ! command -v jq');
+      expect(helpers).toContain('if ! command -v claude');
+      expect(helpers).toContain('Error:');
+    });
+  });
+
+  describe('generateFooter', () => {
+    it('should generate footer with statistics', () => {
+      const testProviders = testUtils.createTestProviders(2);
+      const footer = aliasGenerator.generateFooter(testProviders);
       
-      expect(status.aliasFile.exists).toBe(true);
-      expect(status.shells).toHaveLength(3);
-      expect(status.recommendations).toHaveLength(1); // install shell
+      expect(footer).toContain('# Claude Code Kit Statistics');
+      expect(footer).toContain('# Total providers configured: 2');
+      expect(footer).toContain('# Available commands:');
+      expect(footer).toContain('claude-providers()');
+      expect(footer).toContain('claude-reload()');
+    });
+
+    it('should list all providers', () => {
+      const testProviders = testUtils.createTestProviders(3);
+      const footer = aliasGenerator.generateFooter(testProviders);
       
-      const bashShell = status.shells.find(s => s.shell === 'bash');
-      expect(bashShell.exists).toBe(true);
-      expect(bashShell.configured).toBe(false);
+      testProviders.forEach(provider => {
+        expect(footer).toContain(`${provider.alias}: ${provider.baseURL}`);
+      });
+    });
+
+    it('should handle empty providers list', () => {
+      const footer = aliasGenerator.generateFooter([]);
+      
+      expect(footer).toContain('# Total providers configured: 0');
+      expect(footer).toContain('(none configured)');
+    });
+  });
+
+  describe('validateAlias', () => {
+    it('should accept valid aliases', () => {
+      const validAliases = ['myalias', 'test123', 'test-alias', 'test_alias'];
+      
+      validAliases.forEach(alias => {
+        expect(() => aliasGenerator.validateAlias(alias)).not.toThrow();
+      });
+    });
+
+    it('should reject invalid alias formats', () => {
+      const invalidAliases = ['test alias', 'test!', 'test@domain', 'test.alias'];
+      
+      invalidAliases.forEach(alias => {
+        expect(() => aliasGenerator.validateAlias(alias))
+          .toThrow('Alias can only contain');
+      });
+    });
+
+    it('should reject shell reserved words', () => {
+      const reservedWords = ['alias', 'echo', 'cd', 'test', 'if', 'export'];
+      
+      reservedWords.forEach(word => {
+        expect(() => aliasGenerator.validateAlias(word))
+          .toThrow('shell reserved word');
+      });
+    });
+
+    it('should warn about common command conflicts', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      
+      aliasGenerator.validateAlias('git');
+      
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('conflicts with a common command')
+      );
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('getStats', () => {
+    it('should return statistics', async () => {
+      const testProviders = testUtils.createTestProviders(3);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
+      await aliasGenerator.generateAliases();
+      
+      const stats = await aliasGenerator.getStats();
+      
+      expect(stats.totalProviders).toBe(3);
+      expect(stats.aliases).toHaveLength(3);
+      expect(stats.baseURLs).toEqual(expect.arrayContaining([
+        testProviders[0].baseURL,
+        testProviders[1].baseURL,
+        testProviders[2].baseURL
+      ]));
+      expect(stats.lastGenerated).toBeTruthy();
+      expect(new Date(stats.lastGenerated)).toBeInstanceOf(Date);
+    });
+
+    it('should handle no aliases file', async () => {
+      const stats = await aliasGenerator.getStats();
+      
+      expect(stats.totalProviders).toBe(0);
+      expect(stats.aliases).toEqual([]);
+      expect(stats.lastGenerated).toBeNull();
+    });
+  });
+
+  describe('isUpToDate', () => {
+    it('should return false when aliases file does not exist', async () => {
+      const upToDate = await aliasGenerator.isUpToDate();
+      expect(upToDate).toBe(false);
+    });
+
+    it('should return true when aliases file is newer than providers', async () => {
+      const testProviders = testUtils.createTestProviders(1);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
+      
+      // Generate aliases after creating providers
+      await testUtils.sleep(10); // Ensure different timestamps
+      await aliasGenerator.generateAliases();
+      
+      const upToDate = await aliasGenerator.isUpToDate();
+      expect(upToDate).toBe(true);
+    });
+
+    it('should return false when provider is newer than aliases', async () => {
+      await aliasGenerator.generateAliases();
+      
+      // Create provider after generating aliases
+      await testUtils.sleep(10); // Ensure different timestamps
+      const testProvider = testUtils.createTestProvider();
+      await testUtils.createTestProviderFiles(providersDir, [testProvider]);
+      
+      const upToDate = await aliasGenerator.isUpToDate();
+      expect(upToDate).toBe(false);
+    });
+  });
+
+  describe('previewAliases', () => {
+    it('should return alias content without writing file', async () => {
+      const testProviders = testUtils.createTestProviders(2);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
+      
+      const preview = await aliasGenerator.previewAliases();
+      
+      expect(preview).toContain('# Claude Code Kit - Auto-generated aliases');
+      expect(preview).toContain(`alias ${testProviders[0].alias}=`);
+      expect(preview).toContain(`alias ${testProviders[1].alias}=`);
+      
+      // Verify file was not created
+      expect(await fs.pathExists(aliasesFile)).toBe(false);
+    });
+  });
+
+  describe('getLastGeneratedTime', () => {
+    it('should return null for non-existent file', async () => {
+      const time = await aliasGenerator.getLastGeneratedTime();
+      expect(time).toBeNull();
+    });
+
+    it('should return file modification time', async () => {
+      await aliasGenerator.generateAliases();
+      
+      const time = await aliasGenerator.getLastGeneratedTime();
+      expect(time).toBeTruthy();
+      expect(new Date(time)).toBeInstanceOf(Date);
+      expect(new Date(time).getTime()).toBeLessThanOrEqual(Date.now() + 1000); // Allow 1 second tolerance
+    });
+  });
+
+  describe('integration tests', () => {
+    it('should generate working shell aliases', async () => {
+      const testProviders = testUtils.createTestProviders(2);
+      await testUtils.createTestProviderFiles(providersDir, testProviders);
+      
+      await aliasGenerator.generateAliases();
+      
+      const content = await fs.readFile(aliasesFile, 'utf8');
+      
+      // Verify alias syntax
+      testProviders.forEach(provider => {
+        const aliasPattern = new RegExp(`alias ${provider.alias}='[^']*'`);
+        expect(content).toMatch(aliasPattern);
+      });
+    });
+
+    it('should handle special characters in provider configurations', async () => {
+      const specialProvider = testUtils.createTestProvider({
+        alias: 'test-provider_123',
+        baseURL: 'https://api.test.com/v1/special-endpoint'
+      });
+      
+      await testUtils.createTestProviderFiles(providersDir, [specialProvider]);
+      await aliasGenerator.generateAliases();
+      
+      const content = await fs.readFile(aliasesFile, 'utf8');
+      expect(content).toContain(specialProvider.alias);
+      expect(content).toContain(specialProvider.baseURL);
+    });
+
+    it('should regenerate aliases when providers change', async () => {
+      // Initial generation
+      const initialProviders = testUtils.createTestProviders(1);
+      await testUtils.createTestProviderFiles(providersDir, initialProviders);
+      await aliasGenerator.generateAliases();
+      
+      let content = await fs.readFile(aliasesFile, 'utf8');
+      expect(content).toContain(initialProviders[0].alias);
+      
+      // Add new provider
+      const newProvider = testUtils.createTestProvider({ alias: 'newprovider' });
+      await testUtils.createTestProviderFiles(providersDir, [newProvider]);
+      await aliasGenerator.generateAliases();
+      
+      content = await fs.readFile(aliasesFile, 'utf8');
+      expect(content).toContain(initialProviders[0].alias);
+      expect(content).toContain(newProvider.alias);
     });
   });
 });

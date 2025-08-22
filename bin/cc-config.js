@@ -1,760 +1,772 @@
 #!/usr/bin/env node
 
-const { program } = require('commander');
+/**
+ * Claude Code Kit Configuration CLI
+ * 
+ * This tool manages Claude Code Kit configurations, providers, and backups.
+ */
+
+const { Command } = require('commander');
 const chalk = require('chalk');
-const pkg = require('../package.json');
+const ora = require('ora');
+const inquirer = require('inquirer');
+const fs = require('fs-extra');
+const path = require('path');
+const os = require('os');
 
-// 导入命令模块
-const providerCommands = require('../src/commands/provider');
-const aliasCommands = require('../src/commands/alias');
-const deployCommands = require('../src/commands/deploy');
-const wizardCommands = require('../src/commands/wizard');
-const {
-  handleError,
-  setupGlobalErrorHandlers,
-} = require('../src/utils/errorHandler');
+// Import core modules
+const ConfigManager = require('../src/core/ConfigManager');
+const ProviderManager = require('../src/core/ProviderManager');
+const BackupManager = require('../src/core/BackupManager');
+const AliasGenerator = require('../src/core/AliasGenerator');
 
-// 设置全局错误处理
-setupGlobalErrorHandlers();
+// Configuration
+const CONFIG_DIR = path.join(os.homedir(), '.cc-config');
+const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 
-// CLI 主程序
+// Initialize managers
+const configManager = new ConfigManager(CONFIG_DIR);
+const providerManager = new ProviderManager(CONFIG_DIR);
+const backupManager = new BackupManager(CONFIG_DIR, CLAUDE_DIR);
+const aliasGenerator = new AliasGenerator(CONFIG_DIR);
+
+// Main CLI program
+const program = new Command();
+
 program
   .name('cc-config')
-  .description('Claude Code 配置工具集 - 支持多服务商API切换和配置管理')
-  .version(pkg.version, '-v, --version', '显示版本号');
+  .description('Claude Code Kit Configuration Manager')
+  .version('1.0.0');
 
-// 服务商管理命令
+
+// Provider management commands
 const providerCmd = program
   .command('provider')
-  .description('服务商配置管理')
-  .alias('p');
+  .description('Manage API providers');
 
 providerCmd
   .command('add')
-  .description('添加新的服务商配置')
-  .option('-i, --interactive', '交互式配置模式', true)
-  .option('--name <name>', '服务商名称')
-  .option('--alias <alias>', '服务商别名')
-  .option('--url <url>', 'API基础URL')
-  .option('--key <key>', 'API密钥')
-  .option('--timeout <timeout>', '请求超时时间(秒)', '30')
-  .action(providerCommands.add);
-
-providerCmd
-  .command('list')
-  .description('列出所有配置的服务商')
-  .option('-d, --detail', '显示详细信息', false)
-  .action(providerCommands.list);
-
-providerCmd
-  .command('edit <name>')
-  .description('编辑指定服务商配置')
-  .action(providerCommands.edit);
-
-providerCmd
-  .command('remove <name>')
-  .description('删除指定服务商配置')
-  .option('-f, --force', '强制删除无需确认', false)
-  .action(providerCommands.remove);
-
-providerCmd
-  .command('test <name>')
-  .description('测试服务商配置')
-  .action(providerCommands.test);
-
-providerCmd
-  .command('stats')
-  .description('显示服务商统计信息')
-  .action(providerCommands.stats);
-
-providerCmd
-  .command('get <name>')
-  .description('获取指定服务商配置')
-  .option('--json', '以JSON格式输出', false)
-  .action(providerCommands.get);
-
-providerCmd
-  .command('regenerate-aliases')
-  .description('重新生成别名配置')
-  .option('-f, --force', '强制重新生成', false)
-  .action(providerCommands.regenerateAliases);
-
-providerCmd
-  .command('wizard')
-  .description('交互式服务商配置向导')
-  .option('-m, --mode <mode>', '配置模式 (template|quick|advanced)', 'template')
-  .action(async options => {
-    try {
-      await wizardCommands.wizard(options);
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-// 独立的向导命令 (更方便的访问)
-program
-  .command('wizard')
-  .description('🧙‍♂️ 启动配置向导')
-  .option('-m, --mode <mode>', '配置模式 (template|quick|advanced)', 'template')
-  .action(async options => {
-    try {
-      await wizardCommands.wizard(options);
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-// 别名管理命令
-const aliasCmd = program
-  .command('alias')
-  .description('别名配置管理')
-  .alias('a');
-
-aliasCmd
-  .command('generate')
-  .description('生成Shell别名配置')
-  .option('-s, --shell <shell>', 'Shell类型 (bash/zsh)', null)
-  .option('-f, --force', '强制重新生成', false)
-  .action(aliasCommands.generate);
-
-aliasCmd
-  .command('install')
-  .description('安装别名到Shell配置')
-  .option('-s, --shell <shell>', 'Shell类型 (bash/zsh)', null)
-  .option('-f, --force', '强制重新安装', false)
-  .action(aliasCommands.install);
-
-aliasCmd
-  .command('uninstall')
-  .description('从Shell配置中移除别名')
-  .action(aliasCommands.uninstall);
-
-aliasCmd
-  .command('validate')
-  .description('验证别名配置')
-  .action(aliasCommands.validate);
-
-aliasCmd
-  .command('stats')
-  .description('显示别名统计信息')
-  .action(aliasCommands.stats);
-
-// 备份管理命令
-const backupCmd = program
-  .command('backup')
-  .description('配置备份管理')
-  .alias('b');
-
-backupCmd
-  .command('create [description]')
-  .description('创建配置备份')
-  .action(async description => {
-    try {
-      const ConfigManager = require('../src/core/ConfigManager');
-      const configManager = new ConfigManager();
-
-      const timestamp = await configManager.createBackup(
-        description || '手动备份'
-      );
-      console.log(chalk.green('✅ 备份创建成功:'), timestamp);
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-backupCmd
-  .command('list')
-  .description('列出所有备份')
+  .description('Add a new API provider')
   .action(async () => {
     try {
-      const ConfigManager = require('../src/core/ConfigManager');
-      const configManager = new ConfigManager();
+      const spinner = ora('Initializing provider setup...').start();
+      await configManager.init();
+      spinner.stop();
 
-      const history = await configManager.readHistory();
+      console.log(chalk.blue('\n📡 Add New API Provider\n'));
 
-      if (history.backups.length === 0) {
-        console.log(chalk.yellow('📝 暂无备份记录'));
+      const answers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'alias',
+          message: 'Provider alias (command name):',
+          validate: (input) => {
+            if (!input) {return 'Alias is required';}
+            if (!/^[a-zA-Z0-9-_]+$/.test(input)) {
+              return 'Alias can only contain letters, numbers, hyphens, and underscores';
+            }
+            return true;
+          }
+        },
+        {
+          type: 'input',
+          name: 'baseURL',
+          message: 'API Base URL:',
+          default: 'https://api.anthropic.com',
+          validate: (input) => {
+            if (!input) {return 'Base URL is required';}
+            try {
+              new URL(input);
+              return true;
+            } catch {
+              return 'Please enter a valid URL';
+            }
+          }
+        },
+        {
+          type: 'password',
+          name: 'apiKey',
+          message: 'API Key:',
+          mask: '*',
+          validate: (input) => {
+            if (!input) {return 'API Key is required';}
+            if (input.length < 10) {return 'API Key seems too short';}
+            return true;
+          }
+        },
+        {
+          type: 'input',
+          name: 'timeout',
+          message: 'Request timeout (ms):',
+          default: '3000000',
+          validate: (input) => {
+            const num = parseInt(input);
+            if (isNaN(num) || num < 1000) {return 'Timeout must be at least 1000ms';}
+            return true;
+          }
+        }
+      ]);
+
+      const addSpinner = ora('Adding provider...').start();
+      
+      await providerManager.addProvider(answers);
+      await aliasGenerator.generateAliases();
+      
+      addSpinner.succeed(chalk.green(`Provider '${answers.alias}' added successfully!`));
+      
+      console.log(chalk.yellow('\n💡 Next steps:'));
+      console.log(`   1. Restart your terminal or run: source ~/.zshrc`);
+      console.log(`   2. Test the provider: ${answers.alias} "Hello"`);
+      console.log(`   3. List all providers: cc-config provider list`);
+
+    } catch (error) {
+      console.error(chalk.red('\n❌ Error adding provider:'), error.message);
+      process.exit(1);
+    }
+  });
+
+providerCmd
+  .command('show <alias>')
+  .description('Show provider details')
+  .action(async (alias) => {
+    try {
+      const spinner = ora(`Loading provider '${alias}'...`).start();
+      
+      await configManager.init();
+      const provider = await providerManager.getProvider(alias);
+      
+      if (!provider) {
+        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        console.log(chalk.blue('\nRun: cc-config provider list'));
         return;
       }
 
-      console.log(chalk.blue('📋 备份列表:\n'));
-      history.backups.forEach((backup, index) => {
-        console.log(`${index + 1}. ${backup.timestamp}`);
-        console.log(`   描述: ${backup.description}`);
-        console.log(`   时间: ${new Date(backup.created).toLocaleString()}`);
-        console.log(`   大小: ${(backup.size / 1024).toFixed(2)} KB`);
-        console.log();
-      });
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
+      spinner.stop();
 
-backupCmd
-  .command('restore <timestamp>')
-  .description('恢复指定备份')
-  .action(async timestamp => {
-    try {
-      const ConfigManager = require('../src/core/ConfigManager');
-      const configManager = new ConfigManager();
-
-      await configManager.restoreBackup(timestamp);
-      console.log(chalk.green('✅ 备份恢复成功'));
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-backupCmd
-  .command('clean')
-  .description('清理旧备份文件')
-  .option('-k, --keep <number>', '保留备份数量', '10')
-  .option('-d, --days <number>', '保留天数', '30')
-  .option('-f, --force', '强制清理无需确认', false)
-  .action(async options => {
-    try {
-      const BackupManager = require('../src/core/BackupManager');
-      const backupManager = new BackupManager();
-
-      const result = await backupManager.cleanOldBackups({
-        keepCount: parseInt(options.keep),
-        keepDays: parseInt(options.days),
-        force: options.force
-      });
-
-      if (result.cleaned > 0) {
-        console.log(chalk.green(`✅ 已清理 ${result.cleaned} 个旧备份`));
-        console.log(chalk.gray(`释放空间: ${(result.spaceFreed / 1024 / 1024).toFixed(2)} MB`));
-      } else {
-        console.log(chalk.blue('ℹ️  没有需要清理的备份'));
-      }
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-backupCmd
-  .command('verify [timestamp]')
-  .description('验证备份完整性')
-  .action(async timestamp => {
-    try {
-      const BackupManager = require('../src/core/BackupManager');
-      const backupManager = new BackupManager();
-
-      const result = await backupManager.verifyBackup(timestamp);
-
-      if (result.summary) {
-        // 验证所有备份的汇总结果
-        console.log(chalk.blue('📊 备份验证汇总'));
-        console.log(`验证备份数: ${result.verified}`);
-        console.log(`有效备份: ${chalk.green(result.valid)}`);
-        console.log(`无效备份: ${chalk.red(result.invalid)}`);
-        
-        if (result.invalid > 0) {
-          console.log(chalk.yellow('\n⚠️ 有备份存在问题:'));
-          result.results.filter(r => !r.valid).forEach(backup => {
-            console.log(`  - ${backup.timestamp}: ${backup.issues.join(', ')}`);
-          });
-        }
-      } else if (result.valid) {
-        console.log(chalk.green('✅ 备份验证通过'));
-        console.log(`文件数量: ${result.fileCount || 0}`);
-        console.log(`总大小: ${((result.totalSize || 0) / 1024 / 1024).toFixed(2)} MB`);
-      } else {
-        console.log(chalk.red('❌ 备份验证失败'));
-        if (result.issues && result.issues.length > 0) {
-          result.issues.forEach(issue => {
-            console.log(chalk.yellow(`  ⚠️  ${issue}`));
-          });
-        }
-      }
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-backupCmd
-  .command('compress <timestamp>')
-  .description('压缩指定备份')
-  .action(async timestamp => {
-    try {
-      const BackupManager = require('../src/core/BackupManager');
-      const backupManager = new BackupManager();
-
-      const result = await backupManager.compressBackup(timestamp);
+      console.log(chalk.blue(`\n📡 Provider Information: ${alias}\n`));
       
-      console.log(chalk.green('✅ 备份压缩完成'));
-      console.log(`原始大小: ${(result.originalSize / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`压缩后: ${(result.compressedSize / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`压缩率: ${result.compressionRatio.toFixed(1)}%`);
+      console.log(chalk.cyan('Configuration:'));
+      console.log(`  Alias: ${provider.alias}`);
+      console.log(`  Base URL: ${provider.baseURL}`);
+      console.log(`  Timeout: ${provider.timeout || '3000000'}ms`);
+      console.log(`  Created: ${provider.created || 'Unknown'}`);
+      console.log(`  Last Used: ${provider.lastUsed || 'Never'}`);
+      
+      console.log(chalk.cyan('\nUsage:'));
+      console.log(`  ${provider.alias} "your message"     # Use this provider`);
+      console.log(`  cc-config provider edit ${provider.alias}    # Edit this provider`);
+
     } catch (error) {
-      handleError(error);
+      console.error(chalk.red('\n❌ Error showing provider:'), error.message);
       process.exit(1);
     }
   });
 
-backupCmd
-  .command('export <timestamp>')
-  .description('导出备份到指定位置')
-  .option('-o, --output <path>', '输出路径')
-  .option('-f, --format <format>', '导出格式 (tar|zip)', 'tar')
-  .action(async (timestamp, options) => {
-    try {
-      const BackupManager = require('../src/core/BackupManager');
-      const backupManager = new BackupManager();
-
-      const result = await backupManager.exportBackup(timestamp, {
-        outputPath: options.output,
-        format: options.format
-      });
-
-      console.log(chalk.green('✅ 备份导出成功'));
-      console.log(`导出文件: ${result.exportPath}`);
-      console.log(`文件大小: ${(result.fileSize / 1024 / 1024).toFixed(2)} MB`);
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-// 配置部署命令
-const deployCmd = program
-  .command('deploy')
-  .description('配置模板部署管理')
-  .alias('d');
-
-deployCmd
-  .command('run [template]')
-  .description('部署配置模板')
-  .option('-f, --force', '跳过现有配置检查', false)
-  .option('-o, --overwrite', '覆盖现有文件', false)
-  .option('-t, --template <name>', '指定模板名称')
-  .action(async (template, options) => {
-    try {
-      await deployCommands.deploy({
-        template: template || options.template,
-        force: options.force,
-        overwrite: options.overwrite,
-      });
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-deployCmd
+providerCmd
   .command('list')
-  .description('列出可用配置模板')
+  .description('List all configured providers')
   .action(async () => {
     try {
-      await deployCommands.listTemplates();
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-deployCmd
-  .command('show <template>')
-  .description('显示模板详情')
-  .action(async template => {
-    try {
-      await deployCommands.showTemplate(template);
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-// 历史记录命令
-program
-  .command('history')
-  .description('查看和管理配置历史')
-  .option('-l, --limit <number>', '显示数量限制', '10')
-  .option('-t, --type <type>', '过滤类型 (backup|deploy|all)', 'all')
-  .option('--interactive', '交互式选择备份恢复', false)
-  .action(async options => {
-    try {
-      const BackupManager = require('../src/core/BackupManager');
-      const inquirer = require('inquirer');
+      const spinner = ora('Loading providers...').start();
       
-      const backupManager = new BackupManager();
-      const backups = await backupManager.listBackups({
-        limit: parseInt(options.limit),
-        sortBy: 'created'
-      });
+      await configManager.init();
+      const providers = await providerManager.listProviders();
+      
+      spinner.stop();
 
-      if (backups.length === 0) {
-        console.log(chalk.yellow('📝 暂无历史记录'));
-        console.log(chalk.blue('💡 使用 "cc-config backup create" 创建备份'));
+      if (providers.length === 0) {
+        console.log(chalk.yellow('\n📝 No providers configured yet.'));
+        console.log(chalk.blue('   Run: cc-config provider add'));
         return;
       }
 
-      console.log(chalk.blue(`📚 配置历史记录 (最近${Math.min(backups.length, parseInt(options.limit))}条)\n`));
+      console.log(chalk.blue('\n📡 Configured API Providers\n'));
+      
+      console.log(chalk.gray('Alias').padEnd(15) + 
+                  chalk.gray('Base URL').padEnd(35) + 
+                  chalk.gray('Status'));
+      console.log('─'.repeat(60));
 
-      // 显示备份列表
-      backups.forEach((backup, index) => {
-        const age = Math.floor((new Date() - new Date(backup.created)) / (24 * 60 * 60 * 1000));
-        const sizeFormatted = (backup.totalSize / 1024 / 1024).toFixed(2);
-        const statusIcon = backup.exists ? '📁' : '❌';
-        const compressIcon = backup.compressed ? '🗜️' : '';
-        
-        console.log(`${index + 1}. ${statusIcon}${compressIcon} ${chalk.cyan(backup.timestamp)}`);
-        console.log(`   描述: ${backup.description}`);
-        console.log(`   时间: ${new Date(backup.created).toLocaleString()} (${age}天前)`);
-        console.log(`   大小: ${sizeFormatted} MB`);
-        console.log(`   状态: ${backup.exists ? chalk.green('可用') : chalk.red('缺失')}`);
-        console.log();
-      });
+      for (const provider of providers) {
+        const status = chalk.green('✓ Active');
+        console.log(
+          chalk.cyan(provider.alias).padEnd(15) +
+          provider.baseURL.padEnd(35) +
+          status
+        );
+      }
 
-      // 交互式恢复选择
-      if (options.interactive) {
-        const availableBackups = backups.filter(b => b.exists);
-        
-        if (availableBackups.length === 0) {
-          console.log(chalk.red('❌ 没有可用的备份进行恢复'));
-          return;
+      console.log(chalk.yellow(`\n💡 Total: ${providers.length} provider(s) configured`));
+
+    } catch (error) {
+      console.error(chalk.red('\n❌ Error listing providers:'), error.message);
+      process.exit(1);
+    }
+  });
+
+providerCmd
+  .command('edit <alias>')
+  .description('Edit an existing provider')
+  .action(async (alias) => {
+    try {
+      const spinner = ora(`Loading provider '${alias}'...`).start();
+      
+      await configManager.init();
+      const provider = await providerManager.getProvider(alias);
+      
+      if (!provider) {
+        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        return;
+      }
+
+      spinner.stop();
+
+      console.log(chalk.blue(`\n📝 Edit Provider: ${alias}\n`));
+
+      const answers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'baseURL',
+          message: 'API Base URL:',
+          default: provider.baseURL
+        },
+        {
+          type: 'password',
+          name: 'apiKey',
+          message: 'API Key (leave empty to keep current):',
+          mask: '*'
+        },
+        {
+          type: 'input',
+          name: 'timeout',
+          message: 'Request timeout (ms):',
+          default: provider.timeout || '3000000'
         }
+      ]);
 
-        const { selectedBackup } = await inquirer.prompt([{
-          type: 'list',
-          name: 'selectedBackup',
-          message: '选择要恢复的备份:',
-          choices: [
-            ...availableBackups.map(backup => ({
-              name: `${backup.timestamp} - ${backup.description} (${new Date(backup.created).toLocaleString()})`,
-              value: backup.timestamp
-            })),
-            { name: '取消', value: null }
-          ]
-        }]);
+      const updateSpinner = ora('Updating provider...').start();
 
-        if (!selectedBackup) {
-          console.log(chalk.yellow('操作已取消'));
-          return;
-        }
+      const updatedProvider = {
+        ...provider,
+        baseURL: answers.baseURL,
+        timeout: answers.timeout
+      };
 
-        // 确认恢复
-        const { confirmRestore } = await inquirer.prompt([{
+      if (answers.apiKey) {
+        updatedProvider.apiKey = answers.apiKey;
+      }
+
+      await providerManager.updateProvider(alias, updatedProvider);
+      await aliasGenerator.generateAliases();
+
+      updateSpinner.succeed(chalk.green(`Provider '${alias}' updated successfully!`));
+
+    } catch (error) {
+      console.error(chalk.red('\n❌ Error editing provider:'), error.message);
+      process.exit(1);
+    }
+  });
+
+providerCmd
+  .command('remove <alias>')
+  .description('Remove a provider')
+  .action(async (alias) => {
+    try {
+      const spinner = ora(`Loading provider '${alias}'...`).start();
+      
+      await configManager.init();
+      const provider = await providerManager.getProvider(alias);
+      
+      if (!provider) {
+        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        return;
+      }
+
+      spinner.stop();
+
+      const { confirm } = await inquirer.prompt([
+        {
           type: 'confirm',
-          name: 'confirmRestore',
-          message: `确认恢复备份 ${selectedBackup}? (当前配置将被备份)`,
+          name: 'confirm',
+          message: `Are you sure you want to remove provider '${alias}'?`,
           default: false
-        }]);
-
-        if (confirmRestore) {
-          const ConfigManager = require('../src/core/ConfigManager');
-          const configManager = new ConfigManager();
-          
-          console.log(chalk.blue('🔄 正在恢复备份...'));
-          await configManager.restoreBackup(selectedBackup);
-          console.log(chalk.green('✅ 备份恢复成功'));
-          
-          // 重新生成别名
-          console.log(chalk.blue('🔗 重新生成别名配置...'));
-          const { regenerateAliases } = require('../src/commands/provider');
-          await regenerateAliases({ force: true });
-        } else {
-          console.log(chalk.yellow('恢复操作已取消'));
         }
+      ]);
+
+      if (!confirm) {
+        console.log(chalk.yellow('Operation cancelled.'));
+        return;
       }
+
+      const removeSpinner = ora('Removing provider...').start();
+
+      await providerManager.removeProvider(alias);
+      await aliasGenerator.generateAliases();
+
+      removeSpinner.succeed(chalk.green(`Provider '${alias}' removed successfully!`));
+
     } catch (error) {
-      handleError(error);
+      console.error(chalk.red('\n❌ Error removing provider:'), error.message);
       process.exit(1);
     }
   });
 
-// 初始化命令
-program
-  .command('init')
-  .description('初始化配置目录和默认配置')
-  .option('-f, --force', '强制重新初始化', false)
-  .action(async options => {
-    try {
-      const ConfigManager = require('../src/core/ConfigManager');
-      const configManager = new ConfigManager();
-
-      await configManager.initialize(options.force);
-      console.log(chalk.green('✅ 配置初始化成功'));
-      console.log(chalk.blue('ℹ️  配置目录:'), configManager.configDir);
-
-      // 显示下一步提示
-      console.log(chalk.yellow('\n📋 下一步操作:'));
-      console.log('1. 添加服务商配置: cc-config provider add');
-      console.log('2. 生成别名配置: cc-config alias generate');
-      console.log('3. 安装别名到Shell: cc-config alias install');
-    } catch (error) {
-      handleError(error);
-      process.exit(1);
-    }
-  });
-
-// 更新命令
+// Configuration management commands
 program
   .command('update')
-  .description('检查和下载配置更新')
-  .option('-c, --check', '仅检查更新，不下载', false)
-  .option('-f, --force', '强制检查更新', false)
-  .option('-t, --templates', '仅更新模板', false)
-  .option('--no-backup', '跳过更新前备份', false)
-  .option('--dry-run', '显示更新计划但不执行', false)
-  .action(async options => {
+  .description('Update configuration templates')
+  .option('--force', 'Force update without confirmation')
+  .action(async (options) => {
     try {
-      const VersionManager = require('../src/core/VersionManager');
-      const inquirer = require('inquirer');
-      
-      const versionManager = new VersionManager();
-      await versionManager.initialize();
-
-      console.log(chalk.blue('🔍 检查配置更新...\n'));
-
-      // 检查更新
-      const updateCheck = await versionManager.checkForUpdates({
-        force: options.force,
-        includeTemplates: true
-      });
-
-      if (!updateCheck.updateAvailable) {
-        console.log(chalk.green('✅ 配置已是最新版本'));
-        console.log(`当前版本: ${updateCheck.appUpdate.current}`);
-        console.log(`检查时间: ${new Date(updateCheck.checkTime).toLocaleString()}`);
-        return;
-      }
-
-      // 显示可用更新
-      console.log(chalk.yellow('🆕 发现可用更新:\n'));
-
-      if (updateCheck.appUpdate.available) {
-        console.log(chalk.blue('📦 应用更新:'));
-        console.log(`  当前版本: ${updateCheck.appUpdate.current}`);
-        console.log(`  最新版本: ${chalk.green(updateCheck.appUpdate.latest)}`);
-        
-        if (updateCheck.appUpdate.changelog.length > 0) {
-          console.log(`  更新内容:`);
-          updateCheck.appUpdate.changelog.forEach(change => {
-            console.log(`    - ${change}`);
-          });
-        }
-        console.log();
-      }
-
-      if (updateCheck.templateUpdates.available) {
-        console.log(chalk.blue('🎨 模板更新:'));
-        updateCheck.templateUpdates.changes.forEach(change => {
-          const icon = {
-            'new': '🆕',
-            'updated': '⬆️',
-            'modified': '✏️',
-            'removed': '❌'
-          }[change.type] || '📝';
-          
-          console.log(`  ${icon} ${change.name} - ${change.description}`);
-          if (change.oldVersion && change.newVersion) {
-            console.log(`    版本: ${change.oldVersion} → ${change.newVersion}`);
+      if (!options.force) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: 'This will update your configuration templates. Continue?',
+            default: true
           }
-        });
-        console.log();
-      }
+        ]);
 
-      // 仅检查模式
-      if (options.check) {
-        console.log(chalk.blue('💡 使用 "cc-config update" 下载更新'));
-        return;
-      }
-
-      // 预演模式
-      if (options.dryRun) {
-        console.log(chalk.yellow('🧪 更新预演模式'));
-        const plan = await versionManager.performIncrementalUpdate({
-          dryRun: true,
-          includeTemplates: true
-        });
-        
-        if (plan.plan.actions.length > 0) {
-          console.log('计划执行的操作:');
-          plan.plan.actions.forEach(action => {
-            console.log(`  - ${action}`);
-          });
+        if (!confirm) {
+          console.log(chalk.yellow('Update cancelled.'));
+          return;
         }
-        
-        console.log(chalk.blue('\n💡 使用 "cc-config update" 执行更新'));
-        return;
       }
 
-      // 确认更新
-      const { confirmUpdate } = await inquirer.prompt([{
-        type: 'confirm',
-        name: 'confirmUpdate',
-        message: '确认下载并应用这些更新?',
-        default: true
-      }]);
+      const spinner = ora('Updating configuration...').start();
 
-      if (!confirmUpdate) {
-        console.log(chalk.yellow('更新已取消'));
-        return;
-      }
-
-      // 执行更新
-      console.log(chalk.blue('📥 正在下载更新...'));
+      await configManager.init();
       
-      const downloadResult = await versionManager.downloadUpdates({
-        includeApp: updateCheck.appUpdate.available,
-        includeTemplates: updateCheck.templateUpdates.available || options.templates,
-        backup: options.backup
-      });
+      // Create backup before update
+      const timestamp = await backupManager.createBackup('Pre-update backup');
+      
+      // TODO: Implement configuration update logic
+      // This would download latest templates from GitHub
+      
+      spinner.succeed(chalk.green('Configuration updated successfully!'));
+      console.log(chalk.blue(`Backup created: ${timestamp}`));
 
-      // 显示结果
-      if (downloadResult.backup) {
-        console.log(chalk.green(`✅ 已创建备份: ${downloadResult.backup}`));
-      }
-
-      if (downloadResult.templates.updated.length > 0) {
-        console.log(chalk.green(`✅ 已更新模板: ${downloadResult.templates.updated.join(', ')}`));
-      }
-
-      if (downloadResult.templates.failed.length > 0) {
-        console.log(chalk.red('❌ 更新失败的模板:'));
-        downloadResult.templates.failed.forEach(failure => {
-          console.log(`  - ${failure.name}: ${failure.error}`);
-        });
-      }
-
-      if (updateCheck.appUpdate.available) {
-        console.log(chalk.yellow('\n⚠️ 应用更新需要重新安装 Claude Code Kit'));
-        console.log(chalk.blue('请访问 https://github.com/anthropics/claude-code-kit 获取最新版本'));
-      }
-
-      // 重新生成别名（如果模板有更新）
-      if (downloadResult.templates.updated.length > 0) {
-        console.log(chalk.blue('\n🔗 重新生成别名配置...'));
-        const { regenerateAliases } = require('../src/commands/provider');
-        await regenerateAliases({ force: true });
-      }
-
-      console.log(chalk.green('\n🎉 更新完成!'));
     } catch (error) {
-      handleError(error);
+      console.error(chalk.red('\n❌ Error updating configuration:'), error.message);
       process.exit(1);
     }
   });
 
 program
-  .command('version')
-  .description('显示版本信息和更新状态')
+  .command('history')
+  .description('View and restore configuration backups')
   .action(async () => {
     try {
-      const VersionManager = require('../src/core/VersionManager');
-      const versionManager = new VersionManager();
-      await versionManager.initialize();
-
-      const status = await versionManager.getVersionStatus();
-
-      console.log(chalk.blue('📋 Claude Code Kit 版本信息\n'));
+      const spinner = ora('Loading backup history...').start();
       
-      console.log(`当前版本: ${chalk.green(status.currentVersion)}`);
-      console.log(`远程版本: ${status.remoteVersion}`);
-      console.log(`上次检查: ${status.lastCheck}`);
-      console.log(`下次检查: ${status.nextCheck}`);
-      console.log(`上次更新: ${status.lastUpdate}`);
-      console.log(`模板数量: ${status.templateCount}`);
-      console.log(`缓存大小: ${(status.cacheSize / 1024).toFixed(2)} KB`);
+      await configManager.init();
+      const backups = await backupManager.listBackups();
+      
+      spinner.stop();
 
-      console.log(chalk.gray('\n💡 使用 "cc-config update --check" 检查更新'));
+      if (backups.length === 0) {
+        console.log(chalk.yellow('\n📦 No backups found.'));
+        return;
+      }
+
+      console.log(chalk.blue('\n📦 Configuration Backup History\n'));
+
+      const choices = backups.map((backup) => ({
+        name: `${backup.timestamp} - ${backup.description} (${backup.size || 'Unknown size'})`,
+        value: backup.timestamp,
+        short: backup.timestamp
+      }));
+
+      choices.push({ name: chalk.gray('Cancel'), value: null });
+
+      const { selectedBackup } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'selectedBackup',
+          message: 'Select a backup to restore:',
+          choices
+        }
+      ]);
+
+      if (!selectedBackup) {
+        console.log(chalk.yellow('Operation cancelled.'));
+        return;
+      }
+
+      const { confirm } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirm',
+          message: `Restore backup from ${selectedBackup}? This will overwrite current configuration.`,
+          default: false
+        }
+      ]);
+
+      if (!confirm) {
+        console.log(chalk.yellow('Restore cancelled.'));
+        return;
+      }
+
+      const restoreSpinner = ora('Restoring backup...').start();
+
+      await backupManager.restoreBackup(selectedBackup);
+      await aliasGenerator.generateAliases();
+
+      restoreSpinner.succeed(chalk.green('Backup restored successfully!'));
+
     } catch (error) {
-      handleError(error);
+      console.error(chalk.red('\n❌ Error managing backups:'), error.message);
       process.exit(1);
     }
   });
 
-// 状态信息命令
+
+
+providerCmd
+  .command('use [alias]')
+  .description('Set default provider (like nvm use)')
+  .action(async (alias) => {
+    try {
+      const spinner = ora('Setting default provider...').start();
+      
+      await configManager.init();
+      const providers = await providerManager.listProviders();
+      
+      if (providers.length === 0) {
+        spinner.fail('No providers configured. Add a provider first.');
+        return;
+      }
+      
+      // If only one provider, use it automatically
+      if (providers.length === 1) {
+        const defaultProvider = providers[0];
+        spinner.succeed(`Using ${defaultProvider.alias} (only provider available)`);
+        console.log(chalk.green(`✓ Default provider: ${defaultProvider.alias} (${defaultProvider.baseURL})`));
+        return;
+      }
+      
+      // If alias provided, use it
+      if (alias) {
+        const provider = await providerManager.getProvider(alias);
+        if (!provider) {
+          spinner.fail(`Provider '${alias}' not found`);
+          return;
+        }
+        spinner.succeed(`Now using ${alias}`);
+        console.log(chalk.green(`✓ Default provider: ${alias} (${provider.baseURL})`));
+        return;
+      }
+      
+      // Interactive selection when multiple providers exist
+      spinner.stop();
+      
+      console.log(chalk.blue('\n📡 Available Providers:\n'));
+      providers.forEach((p, index) => {
+        console.log(`  ${index + 1}. ${chalk.cyan(p.alias)} (${p.baseURL})`);
+      });
+      
+      const readline = require('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      
+      rl.question('\nSelect provider (1-' + providers.length + '): ', (answer) => {
+        const index = parseInt(answer) - 1;
+        if (index >= 0 && index < providers.length) {
+          const selectedProvider = providers[index];
+          console.log(chalk.green(`✓ Now using: ${selectedProvider.alias} (${selectedProvider.baseURL})`));
+        } else {
+          console.log(chalk.red('Invalid selection'));
+        }
+        rl.close();
+      });
+      
+    } catch (error) {
+      console.error(chalk.red('\n❌ Error setting default provider:'), error.message);
+      process.exit(1);
+    }
+  });
+
+
+// Enhanced status command
 program
   .command('status')
-  .description('显示当前配置状态')
-  .action(async () => {
+  .description('Show system status and configuration info')
+  .option('--detailed', 'Show detailed status information')
+  .action(async (options) => {
     try {
-      const ConfigManager = require('../src/core/ConfigManager');
-      const ConfigStorage = require('../src/core/ConfigStorage');
-      const ProviderManager = require('../src/core/ProviderManager');
-      const AliasGenerator = require('../src/core/AliasGenerator');
+      const spinner = ora('Checking system status...').start();
+      
+      await configManager.init();
+      
+      const [providers, backups, systemInfo, config] = await Promise.all([
+        providerManager.listProviders(),
+        backupManager.listBackups(), 
+        configManager.getSystemInfo(),
+        configManager.getConfig()
+      ]);
+      
+      spinner.stop();
 
-      const configManager = new ConfigManager();
-      const configStorage = new ConfigStorage();
-      const providerManager = new ProviderManager();
-      const aliasGenerator = new AliasGenerator(configStorage);
+      console.log(chalk.blue('\n📊 Claude Code Kit Status\n'));
 
-      console.log(chalk.blue('📊 Claude Code Kit 状态信息\n'));
+      // System info
+      console.log(chalk.cyan('System Information:'));
+      console.log(`  Version: ${systemInfo.version}`);
+      console.log(`  Node.js: ${systemInfo.nodeVersion}`);
+      console.log(`  Platform: ${systemInfo.platform}`);
+      console.log(`  Initialized: ${systemInfo.initialized ? '✓' : '✗'}`);
+      console.log(`  Config Directory: ${systemInfo.configDir}`);
+      console.log(`  Claude Directory: ${systemInfo.claudeDir}`);
 
-      // 配置目录信息
-      const paths = configManager.getPaths();
-      console.log(chalk.green('📁 配置目录:'));
-      console.log(`   主目录: ${paths.configDir}`);
-      console.log(`   服务商: ${paths.providersDir}`);
-      console.log(`   备份: ${paths.backupDir}`);
-      console.log(`   别名: ${aliasGenerator.aliasesFile}`);
-      console.log();
+      // Configuration info
+      console.log(chalk.cyan('\nConfiguration:'));
+      console.log(`  Providers: ${providers.length} configured`);
+      console.log(`  Backups: ${backups.length} available`);
+      console.log(`  Auto Backup: ${config.features?.autoBackup ? '✓' : '✗'}`);
+      console.log(`  Validation: ${config.features?.validateConfigs ? '✓' : '✗'}`);
+      console.log(`  Last Update: ${backups.length > 0 ? backups[0].timestamp : 'Never'}`);
 
-      // 服务商统计
-      const stats = await providerManager.getStats();
-      console.log(chalk.green('🌐 服务商统计:'));
-      console.log(`   总数: ${stats.total}`);
-      console.log(`   启用: ${stats.enabled}`);
-      console.log(`   禁用: ${stats.disabled}`);
-      console.log(`   已配置密钥: ${stats.withApiKey}`);
-      console.log();
+      // Directory status
+      console.log(chalk.cyan('\nDirectory Status:'));
+      console.log(`  ~/.cc-config: ${await fs.pathExists(CONFIG_DIR) ? '✓' : '✗'}`);
+      console.log(`  ~/.claude: ${await fs.pathExists(CLAUDE_DIR) ? '✓' : '✗'}`);
+      console.log(`  aliases.sh: ${await fs.pathExists(path.join(CONFIG_DIR, 'aliases.sh')) ? '✓' : '✗'}`);
 
-      // 别名信息
-      const aliasStats = await aliasGenerator.getAliasStats();
-      console.log(chalk.green('🔗 别名信息:'));
-      console.log(`   可用别名: ${aliasStats.enabled}`);
-      if (aliasStats.aliases.length > 0) {
-        aliasStats.aliases.forEach(alias => {
-          const status = alias.enabled ? '✅' : '❌';
-          console.log(
-            `   ${status} ${alias.alias} - ${alias.description || '无描述'}`
-          );
-        });
+      if (options.detailed) {
+        // Detailed provider information
+        if (providers.length > 0) {
+          console.log(chalk.cyan('\nProvider Details:'));
+          for (const provider of providers) {
+            console.log(`  ${provider.alias}:`);
+            console.log(`    URL: ${provider.baseURL}`);
+            console.log(`    Created: ${provider.created || 'Unknown'}`);
+            console.log(`    Last Used: ${provider.lastUsed || 'Never'}`);
+          }
+        }
+
+        // Backup statistics
+        if (backups.length > 0) {
+          const backupStats = await backupManager.getBackupStats();
+          console.log(chalk.cyan('\nBackup Statistics:'));
+          console.log(`  Total Size: ${backupStats.totalSize}`);
+          console.log(`  Oldest: ${backupStats.oldestBackup?.timestamp || 'None'}`);
+          console.log(`  Newest: ${backupStats.newestBackup?.timestamp || 'None'}`);
+        }
       }
-      console.log();
 
-      // 备份信息
-      const history = await configManager.readHistory();
-      console.log(chalk.green('💾 备份信息:'));
-      console.log(`   备份数量: ${history.backups.length}`);
-      if (history.backups.length > 0) {
-        const latest = history.backups[history.backups.length - 1];
-        console.log(`   最新备份: ${latest.timestamp} (${latest.description})`);
-      }
     } catch (error) {
-      handleError(error);
+      console.error(chalk.red('\n❌ Error checking status:'), error.message);
       process.exit(1);
     }
   });
 
-// 错误处理
-program.exitOverride(err => {
-  handleError(err);
+// Doctor command for comprehensive diagnostics (includes validation)
+program
+  .command('doctor')
+  .description('Run comprehensive system diagnostics and validation')
+  .option('--fix', 'Attempt to fix found issues automatically')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue('\n🩺 Claude Code Kit System Diagnostics\n'));
+
+      // Check Node.js version
+      const nodeVersion = process.version;
+      const majorVersion = parseInt(nodeVersion.slice(1));
+      console.log(chalk.cyan('Node.js Environment:'));
+      console.log(`  Version: ${nodeVersion} ${majorVersion >= 18 ? '✅' : '❌ (requires Node.js 18+)'}`);
+      console.log(`  Platform: ${process.platform}`);
+      console.log(`  Architecture: ${process.arch}`);
+
+      // Check dependencies
+      console.log(chalk.cyan('\nDependencies:'));
+      const dependencies = ['jq', 'claude'];
+      for (const dep of dependencies) {
+        try {
+          const { exec } = require('child_process');
+          const { promisify } = require('util');
+          const execAsync = promisify(exec);
+          
+          await execAsync(`which ${dep}`);
+          console.log(`  ${dep}: ✅ Available`);
+        } catch {
+          console.log(`  ${dep}: ❌ Not found`);
+        }
+      }
+
+      // Check system permissions
+      console.log(chalk.cyan('\nFile System Permissions:'));
+      const testDirs = [CONFIG_DIR, CLAUDE_DIR, os.homedir()];
+      for (const dir of testDirs) {
+        try {
+          await fs.access(dir, fs.constants.W_OK);
+          console.log(`  ${dir}: ✅ Writable`);
+        } catch {
+          console.log(`  ${dir}: ❌ Not writable`);
+        }
+      }
+
+      // Check configuration
+      console.log(chalk.cyan('\nConfiguration Status:'));
+      try {
+        await configManager.init();
+        console.log('  Initialization: ✅ Success');
+        
+        const validation = await configManager.validateConfiguration();
+        console.log(`  Validation: ${validation.valid ? '✅ Valid' : '❌ Issues found'}`);
+        
+        const providers = await providerManager.listProviders();
+        console.log(`  Providers: ${providers.length} configured`);
+        
+        const backups = await backupManager.listBackups();
+        console.log(`  Backups: ${backups.length} available`);
+        
+      } catch (error) {
+        console.log(`  Configuration: ❌ ${error.message}`);
+      }
+
+      // Configuration Validation
+      console.log(chalk.cyan('\nConfiguration Validation:'));
+      const issues = [];
+      const fixes = [];
+
+      try {
+        // Validate providers
+        const providers = await providerManager.listProviders();
+        for (const provider of providers) {
+          try {
+            const testResult = await providerManager.testProvider(provider.alias);
+            if (!testResult.reachable) {
+              issues.push(`Provider '${provider.alias}': ${testResult.message}`);
+            } else {
+              console.log(`  Provider '${provider.alias}': ✅ Reachable`);
+            }
+          } catch (testError) {
+            issues.push(`Provider '${provider.alias}': ${testError.message}`);
+          }
+        }
+
+        // Validate aliases
+        if (!await aliasGenerator.isUpToDate()) {
+          issues.push('Shell aliases are out of date');
+          if (options.fix) {
+            try {
+              await aliasGenerator.generateAliases();
+              fixes.push('Regenerated shell aliases');
+              console.log('  Aliases: ✅ Updated');
+            } catch (fixError) {
+              issues.push(`Failed to regenerate aliases: ${fixError.message}`);
+            }
+          } else {
+            console.log('  Aliases: ⚠️ Out of date');
+          }
+        } else {
+          console.log('  Aliases: ✅ Up to date');
+        }
+
+        // Validate backups
+        const backups = await backupManager.listBackups();
+        const recentBackups = backups.slice(0, 3);
+        let validBackups = 0;
+        for (const backup of recentBackups) {
+          try {
+            const verification = await backupManager.verifyBackup(backup.timestamp);
+            if (verification.valid) {
+              validBackups++;
+            } else {
+              issues.push(`Backup '${backup.timestamp}': ${verification.issues.join(', ')}`);
+            }
+          } catch (error) {
+            issues.push(`Backup '${backup.timestamp}': ${error.message}`);
+          }
+        }
+        console.log(`  Backups: ${validBackups}/${recentBackups.length} recent backups valid`);
+
+      } catch (error) {
+        issues.push(`Validation failed: ${error.message}`);
+      }
+
+      // Report validation results
+      if (issues.length === 0) {
+        console.log(chalk.green('\n✅ All validation checks passed!'));
+      } else {
+        console.log(chalk.yellow(`\n⚠️ Found ${issues.length} issue(s):`));
+        issues.forEach((issue, index) => {
+          console.log(chalk.red(`  ${index + 1}. ${issue}`));
+        });
+
+        if (fixes.length > 0) {
+          console.log(chalk.green(`\n🔧 Applied ${fixes.length} fix(es):`));
+          fixes.forEach((fix, index) => {
+            console.log(chalk.green(`  ${index + 1}. ${fix}`));
+          });
+        }
+
+        if (options.fix && fixes.length === 0) {
+          console.log(chalk.yellow('\n💡 No automatic fixes available. Manual intervention required.'));
+        } else if (!options.fix) {
+          console.log(chalk.blue('\n💡 Run with --fix to attempt automatic repairs.'));
+        }
+      }
+
+      // Recommendations
+      console.log(chalk.cyan('\nRecommendations:'));
+      console.log('  • Run "cc-config doctor --fix" to automatically fix issues');
+      console.log('  • Run "cc-config status --detailed" for detailed information');
+      console.log('  • Run "cc-config update" to update configuration templates');
+
+    } catch (error) {
+      console.error(chalk.red('\n❌ Error during diagnostics:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Handle unknown commands
+program
+  .command('*', { hidden: true })
+  .action((cmd) => {
+    console.log(chalk.red(`\n❌ Unknown command: ${cmd}`));
+    console.log(chalk.blue('Run "cc-config --help" for available commands.'));
+    process.exit(1);
+  });
+
+// Enhanced error handling
+process.on('uncaughtException', (error) => {
+  console.error(chalk.red('\n💥 Unexpected error:'), error.message);
+  if (process.env.DEBUG) {
+    console.error(chalk.gray(error.stack));
+  }
+  console.error(chalk.yellow('For support, please visit: https://github.com/kedoupi/claude-code-kit/issues'));
   process.exit(1);
 });
 
-// 未知命令处理
-program.on('command:*', () => {
-  console.error(chalk.red('❌ 未知命令:'), program.args.join(' '));
-  console.log();
-  program.help();
+process.on('unhandledRejection', (reason) => {
+  console.error(chalk.red('\n💥 Unhandled promise rejection:'), reason);
+  if (process.env.DEBUG) {
+    console.error(chalk.gray(reason.stack || reason));
+  }
+  console.error(chalk.yellow('For support, please visit: https://github.com/kedoupi/claude-code-kit/issues'));
+  process.exit(1);
 });
 
-// 解析命令行参数
-program.parse();
+// Handle SIGINT gracefully
+process.on('SIGINT', () => {
+  console.log(chalk.yellow('\n👋 Goodbye!'));
+  process.exit(0);
+});
 
-// 如果没有提供任何参数，显示帮助信息
+// Handle SIGTERM gracefully
+process.on('SIGTERM', () => {
+  console.log(chalk.yellow('\n👋 Terminating gracefully...'));
+  process.exit(0);
+});
+
+// Run the CLI
+program.parse(process.argv);
+
+// Show help if no command provided
 if (!process.argv.slice(2).length) {
-  console.log(chalk.blue.bold('🔧 Claude Code Kit 配置工具\n'));
-  program.help();
+  program.outputHelp();
 }

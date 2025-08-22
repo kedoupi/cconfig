@@ -1,377 +1,509 @@
+/**
+ * Configuration Manager
+ * 
+ * Manages the overall configuration system for Claude Code Kit.
+ * Enhanced with comprehensive error handling, validation, and recovery mechanisms.
+ */
+
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
 
 class ConfigManager {
-  constructor() {
-    this.configDir = path.join(os.homedir(), '.cc-config');
-    this.providersDir = path.join(this.configDir, 'providers');
-    this.aliasesFile = path.join(this.configDir, 'aliases.sh');
-    this.backupDir = path.join(this.configDir, 'backups');
-    this.historyFile = path.join(this.configDir, 'history.json');
-
-    // Claude 配置目录
+  constructor(configDir = path.join(os.homedir(), '.cc-config')) {
+    this.configDir = configDir;
     this.claudeDir = path.join(os.homedir(), '.claude');
-  }
-
-  /**
-   * 初始化配置目录和文件
-   */
-  async initialize(force = false) {
-    try {
-      // 创建配置目录
-      await fs.ensureDir(this.configDir);
-      await fs.ensureDir(this.providersDir);
-      await fs.ensureDir(this.backupDir);
-      await fs.ensureDir(this.claudeDir);
-
-      // 设置目录权限 (仅用户可读写)
-      await fs.chmod(this.configDir, 0o700);
-      await fs.chmod(this.providersDir, 0o700);
-      await fs.chmod(this.backupDir, 0o700);
-
-      // 初始化历史记录文件
-      if (force || !(await fs.exists(this.historyFile))) {
-        await this.writeHistory(this.getDefaultHistory());
+    this.providersDir = path.join(configDir, 'providers');
+    this.backupsDir = path.join(configDir, 'backups');
+    this.aliasesFile = path.join(configDir, 'aliases.sh');
+    this.historyFile = path.join(configDir, 'history.json');
+    this.lockFile = path.join(configDir, '.lock');
+    this.configFile = path.join(configDir, 'config.json');
+    
+    // Default configuration
+    this.defaultConfig = {
+      version: '1.0.0',
+      initialized: false,
+      created: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      features: {
+        autoBackup: true,
+        validateConfigs: true,
+        aliasGeneration: true
+      },
+      limits: {
+        maxBackups: 10,
+        maxProviders: 20
       }
-
-      return true;
-    } catch (error) {
-      throw new Error(`配置初始化失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 读取服务商配置
-   */
-  async readProviders() {
-    try {
-      const providers = {};
-      const files = await fs.readdir(this.providersDir);
-
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const providerName = path.basename(file, '.json');
-          const filePath = path.join(this.providersDir, file);
-          const data = await fs.readFile(filePath, 'utf8');
-          providers[providerName] = JSON.parse(data);
-        }
-      }
-
-      return providers;
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return {};
-      }
-      throw new Error(`读取服务商配置失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 写入服务商配置
-   */
-  async writeProvider(name, config) {
-    try {
-      const validatedConfig = this.validateProviderConfig(config);
-
-      // 加密 API 密钥
-      if (validatedConfig.apiKey) {
-        validatedConfig.apiKey = this.encryptApiKey(validatedConfig.apiKey);
-      }
-
-      const filePath = path.join(this.providersDir, `${name}.json`);
-      const data = JSON.stringify(validatedConfig, null, 2);
-
-      await fs.writeFile(filePath, data, 'utf8');
-      await fs.chmod(filePath, 0o600); // 仅用户可读写
-
-      return true;
-    } catch (error) {
-      throw new Error(`写入服务商配置失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 删除服务商配置
-   */
-  async removeProvider(name) {
-    try {
-      const filePath = path.join(this.providersDir, `${name}.json`);
-
-      if (await fs.exists(filePath)) {
-        await fs.remove(filePath);
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      throw new Error(`删除服务商配置失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 获取指定服务商配置
-   */
-  async getProvider(name) {
-    try {
-      const filePath = path.join(this.providersDir, `${name}.json`);
-
-      if (!(await fs.exists(filePath))) {
-        throw new Error(`服务商 "${name}" 不存在`);
-      }
-
-      const data = await fs.readFile(filePath, 'utf8');
-      const config = JSON.parse(data);
-
-      // 解密 API 密钥
-      if (config.apiKey) {
-        config.apiKey = this.decryptApiKey(config.apiKey);
-      }
-
-      return config;
-    } catch (error) {
-      throw new Error(`获取服务商配置失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 创建配置备份
-   */
-  async createBackup(description = '手动备份') {
-    try {
-      const timestamp = new Date()
-        .toISOString()
-        .replace(/[:.]/g, '-')
-        .slice(0, 19);
-      const backupPath = path.join(this.backupDir, timestamp);
-
-      // 创建备份目录
-      await fs.ensureDir(backupPath);
-
-      // 备份 Claude 配置目录
-      if (await fs.exists(this.claudeDir)) {
-        await fs.copy(this.claudeDir, path.join(backupPath, 'claude'));
-      }
-
-      // 记录备份信息
-      const history = await this.readHistory();
-      history.backups.push({
-        timestamp,
-        description,
-        size: await this.getDirectorySize(backupPath),
-        created: new Date().toISOString(),
-      });
-
-      await this.writeHistory(history);
-
-      return timestamp;
-    } catch (error) {
-      throw new Error(`创建备份失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 恢复配置备份
-   */
-  async restoreBackup(timestamp) {
-    try {
-      const backupPath = path.join(this.backupDir, timestamp, 'claude');
-
-      if (!(await fs.exists(backupPath))) {
-        throw new Error(`备份 ${timestamp} 不存在`);
-      }
-
-      // 创建当前状态备份
-      await this.createBackup('恢复前自动备份');
-
-      // 清除当前配置
-      if (await fs.exists(this.claudeDir)) {
-        await fs.remove(this.claudeDir);
-      }
-
-      // 恢复配置
-      await fs.copy(backupPath, this.claudeDir);
-
-      return true;
-    } catch (error) {
-      throw new Error(`恢复备份失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 读取备份历史
-   */
-  async readHistory() {
-    try {
-      if (!(await fs.exists(this.historyFile))) {
-        return this.getDefaultHistory();
-      }
-
-      const data = await fs.readFile(this.historyFile, 'utf8');
-      return JSON.parse(data);
-    } catch (error) {
-      return this.getDefaultHistory();
-    }
-  }
-
-  /**
-   * 写入备份历史
-   */
-  async writeHistory(history) {
-    try {
-      const data = JSON.stringify(history, null, 2);
-      await fs.writeFile(this.historyFile, data, 'utf8');
-      await fs.chmod(this.historyFile, 0o600);
-    } catch (error) {
-      throw new Error(`写入历史记录失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 验证服务商配置格式
-   */
-  validateProviderConfig(config) {
-    if (!config || typeof config !== 'object') {
-      throw new Error('无效的配置格式');
-    }
-
-    if (!config.alias || !config.baseURL) {
-      throw new Error('缺少必要字段: alias 和 baseURL');
-    }
-
-    // 验证别名格式
-    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(config.alias)) {
-      throw new Error(
-        '别名只能包含字母、数字、下划线和连字符，且必须以字母开头'
-      );
-    }
-
-    // 验证 URL 格式
-    try {
-      new URL(config.baseURL);
-    } catch {
-      throw new Error('无效的 Base URL 格式');
-    }
-
-    return {
-      alias: config.alias,
-      baseURL: config.baseURL,
-      apiKey: config.apiKey || '',
-      timeout: Number(config.timeout) || 30000,
-      enabled: Boolean(config.enabled !== false),
-      description: config.description || '',
     };
   }
 
   /**
-   * 简单的 API 密钥加密
+   * Initialize the configuration system with comprehensive error handling
    */
-  encryptApiKey(apiKey) {
-    if (!apiKey || apiKey.startsWith('enc:')) {
-      return apiKey;
-    }
-
+  async init() {
     try {
-      const key = this.getEncryptionKey(); // 已经是 32 字节的 Buffer
-      const iv = crypto.randomBytes(16); // 16 字节初始化向量
-      const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-
-      let encrypted = cipher.update(apiKey, 'utf8', 'hex');
-      encrypted += cipher.final('hex');
-
-      // 格式: iv:encryptedData
-      const result = `${iv.toString('hex')}:${encrypted}`;
-      return 'enc:' + result;
-    } catch (error) {
-      throw new Error(`API密钥加密失败: ${error.message}`);
-    }
-  }
-
-  /**
-   * 解密 API 密钥
-   */
-  decryptApiKey(encryptedKey) {
-    if (!encryptedKey || !encryptedKey.startsWith('enc:')) {
-      return encryptedKey;
-    }
-
-    try {
-      const encryptedData = encryptedKey.substring(4);
-      const [ivHex, encrypted] = encryptedData.split(':');
-
-      if (!ivHex || !encrypted) {
-        throw new Error('无效的加密数据格式');
+      // Check for existing lock
+      await this._checkLock();
+      
+      // Create lock
+      await this._createLock();
+      
+      // Ensure directories exist
+      await this.ensureDirectories();
+      
+      // Ensure required files exist
+      await this.ensureFiles();
+      
+      // Validate configuration integrity
+      const validation = await this.validateConfiguration();
+      if (!validation.valid) {
+        console.warn('Configuration validation issues found:', validation.issues);
+        await this._attemptAutoRepair(validation.issues);
       }
-
-      const key = this.getEncryptionKey(); // 已经是 Buffer
-      const iv = Buffer.from(ivHex, 'hex');
-
-      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-
-      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-
-      return decrypted;
+      
+      // Update configuration
+      await this._updateConfig({ initialized: true, lastUpdated: new Date().toISOString() });
+      
+      // Release lock
+      await this._releaseLock();
+      
     } catch (error) {
-      throw new Error(`API密钥解密失败: ${error.message}`);
+      await this._releaseLock();
+      throw new Error(`Configuration initialization failed: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Check for existing lock to prevent concurrent operations
+   */
+  async _checkLock() {
+    // Ensure config directory exists before checking lock
+    await fs.ensureDir(this.configDir);
+    
+    if (await fs.pathExists(this.lockFile)) {
+      const lockContent = await fs.readFile(this.lockFile, 'utf8').catch(() => '{}');
+      try {
+        const lock = JSON.parse(lockContent);
+        const lockAge = Date.now() - new Date(lock.created).getTime();
+        
+        // If lock is older than 5 minutes, consider it stale
+        if (lockAge > 5 * 60 * 1000) {
+          console.warn('Removing stale lock file');
+          await fs.remove(this.lockFile);
+        } else {
+          throw new Error(`Configuration is locked by process ${lock.pid} since ${lock.created}`);
+        }
+      } catch (parseError) {
+        // Invalid lock file, remove it
+        await fs.remove(this.lockFile);
+      }
+    }
+  }
+  
+  /**
+   * Create lock file
+   */
+  async _createLock() {
+    const lockData = {
+      pid: process.pid,
+      created: new Date().toISOString(),
+      operation: 'init'
+    };
+    await fs.writeJson(this.lockFile, lockData);
+  }
+  
+  /**
+   * Release lock file
+   */
+  async _releaseLock() {
+    if (await fs.pathExists(this.lockFile)) {
+      await fs.remove(this.lockFile);
     }
   }
 
   /**
-   * 获取加密密钥 (基于机器特征)
+   * Ensure all required directories exist with proper permissions
    */
-  getEncryptionKey() {
-    const machineId = os.hostname() + os.userInfo().username;
-    return crypto.createHash('sha256').update(machineId).digest(); // 直接返回 Buffer，32 字节用于 AES-256
+  async ensureDirectories() {
+    const directories = [
+      { path: this.configDir, description: 'Main config directory' },
+      { path: this.providersDir, description: 'Providers directory' },
+      { path: this.backupsDir, description: 'Backups directory' },
+      { path: this.claudeDir, description: 'Claude config directory' },
+      { path: path.join(this.claudeDir, 'commands'), description: 'Commands directory' },
+      { path: path.join(this.claudeDir, 'agents'), description: 'Agents directory' },
+      { path: path.join(this.claudeDir, 'output-styles'), description: 'Output styles directory' }
+    ];
+
+    for (const { path: dirPath, description } of directories) {
+      try {
+        await fs.ensureDir(dirPath);
+        
+        // Verify directory is writable
+        const testFile = path.join(dirPath, '.write-test');
+        await fs.writeFile(testFile, 'test');
+        await fs.remove(testFile);
+        
+      } catch (error) {
+        throw new Error(`Failed to create or write to ${description} (${dirPath}): ${error.message}`);
+      }
+    }
   }
 
   /**
-   * 获取默认历史记录
+   * Ensure all required files exist with proper content and validation
    */
-  getDefaultHistory() {
+  async ensureFiles() {
+    const files = [
+      {
+        path: this.historyFile,
+        content: {
+          version: '1.0',
+          created: new Date().toISOString(),
+          backups: []
+        },
+        description: 'Backup history file'
+      },
+      {
+        path: this.configFile,
+        content: this.defaultConfig,
+        description: 'Main configuration file'
+      }
+    ];
+
+    // Create JSON files
+    for (const { path: filePath, content, description } of files) {
+      try {
+        if (!await fs.pathExists(filePath)) {
+          await fs.writeJson(filePath, content, { spaces: 2 });
+        } else {
+          // Validate existing file
+          try {
+            const existing = await fs.readJson(filePath);
+            if (!existing.version) {
+              // Migrate old format
+              await fs.writeJson(filePath, { ...content, ...existing }, { spaces: 2 });
+            }
+          } catch (parseError) {
+            console.warn(`Corrupted ${description}, recreating...`);
+            await fs.writeJson(filePath, content, { spaces: 2 });
+          }
+        }
+      } catch (error) {
+        throw new Error(`Failed to create ${description}: ${error.message}`);
+      }
+    }
+
+    // Create aliases file
+    if (!await fs.pathExists(this.aliasesFile)) {
+      const aliasContent = `# Claude Code Kit aliases
+# This file is automatically generated. Do not edit manually.
+# Generated on: ${new Date().toISOString()}
+
+# Load function for dynamic configuration
+_cc_load_config() {
+    local config_file="$1"
+    if [ -f "$config_file" ]; then
+        export ANTHROPIC_AUTH_TOKEN=$(jq -r ".apiKey" "$config_file" 2>/dev/null || echo "")
+        export ANTHROPIC_BASE_URL=$(jq -r ".baseURL" "$config_file" 2>/dev/null || echo "")
+        export API_TIMEOUT_MS=$(jq -r ".timeout // \\"3000000\\"" "$config_file" 2>/dev/null || echo "3000000")
+    fi
+}
+
+`;
+      await fs.writeFile(this.aliasesFile, aliasContent);
+    }
+
+    // Create basic Claude settings if they don't exist
+    const claudeSettingsFile = path.join(this.claudeDir, 'settings.json');
+    if (!await fs.pathExists(claudeSettingsFile)) {
+      const claudeSettings = {
+        name: 'Claude Code Kit Configuration',
+        description: 'Enhanced configuration for Claude Code',
+        version: '2.0.0',
+        created: new Date().toISOString(),
+        apiSettings: {
+          timeout: 3000000,
+          retries: 3,
+          backoff: 'exponential'
+        },
+        features: {
+          autoSave: true,
+          syntaxHighlighting: true,
+          multiProvider: true
+        }
+      };
+      await fs.writeJson(claudeSettingsFile, claudeSettings, { spaces: 2 });
+    }
+
+    // Create basic CLAUDE.md if it doesn't exist
+    const claudeMdFile = path.join(this.claudeDir, 'CLAUDE.md');
+    if (!await fs.pathExists(claudeMdFile)) {
+      const claudeMdContent = `# Claude Code Configuration
+
+This configuration has been set up by Claude Code Kit v2.0.0.
+
+## Features
+- Multi-provider support with automatic switching
+- Enhanced error handling and retry logic
+- Automatic backup and restore capabilities
+- Shell integration with dynamic aliases
+
+## Environment Variables
+The following environment variables are automatically managed:
+- \`ANTHROPIC_API_KEY\`: Your API key (set by provider aliases)
+- \`ANTHROPIC_BASE_URL\`: API base URL (set by provider aliases)
+- \`API_TIMEOUT_MS\`: Request timeout in milliseconds
+
+## Provider Management
+Use the \`cc-config\` command to manage providers:
+- \`cc-config provider add\`: Add a new provider
+- \`cc-config provider list\`: List all providers
+- \`cc-config provider edit <alias>\`: Edit a provider
+- \`cc-config provider remove <alias>\`: Remove a provider
+
+## Backup and Restore
+- \`cc-config history\`: View and restore backups
+- \`cc-config status\`: Check system status
+
+## Configuration Files
+- Main config: \`~/.cc-config/config.json\`
+- Providers: \`~/.cc-config/providers/*.json\`
+- Aliases: \`~/.cc-config/aliases.sh\`
+- Backups: \`~/.cc-config/backups/\`
+
+For more information, visit: https://github.com/kedoupi/claude-code-kit
+`;
+      await fs.writeFile(claudeMdFile, claudeMdContent);
+    }
+  }
+
+  /**
+   * Get configuration directory path
+   */
+  getConfigDir() {
+    return this.configDir;
+  }
+
+  /**
+   * Get Claude directory path
+   */
+  getClaudeDir() {
+    return this.claudeDir;
+  }
+
+  /**
+   * Get providers directory path
+   */
+  getProvidersDir() {
+    return this.providersDir;
+  }
+
+  /**
+   * Get backups directory path
+   */
+  getBackupsDir() {
+    return this.backupsDir;
+  }
+
+  /**
+   * Get aliases file path
+   */
+  getAliasesFile() {
+    return this.aliasesFile;
+  }
+
+  /**
+   * Get history file path
+   */
+  getHistoryFile() {
+    return this.historyFile;
+  }
+
+  /**
+   * Check if the configuration system is properly initialized
+   */
+  async isInitialized() {
+    const requiredPaths = [
+      this.configDir,
+      this.providersDir,
+      this.backupsDir,
+      this.claudeDir,
+      this.historyFile
+    ];
+
+    for (const path of requiredPaths) {
+      if (!await fs.pathExists(path)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Get system information
+   */
+  async getSystemInfo() {
     return {
       version: '1.0.0',
-      backups: [],
-      created: new Date().toISOString(),
+      nodeVersion: process.version,
+      platform: `${os.platform()} ${os.arch()}`,
+      configDir: this.configDir,
+      claudeDir: this.claudeDir,
+      initialized: await this.isInitialized()
     };
   }
 
   /**
-   * 获取目录大小
+   * Validate configuration integrity
    */
-  async getDirectorySize(dirPath) {
+  async validateConfiguration() {
+    const issues = [];
+
+    // Check if required directories exist
+    const requiredDirs = [
+      { path: this.configDir, name: 'Config directory' },
+      { path: this.providersDir, name: 'Providers directory' },
+      { path: this.backupsDir, name: 'Backups directory' },
+      { path: this.claudeDir, name: 'Claude directory' }
+    ];
+
+    for (const { path: dirPath, name } of requiredDirs) {
+      if (!await fs.pathExists(dirPath)) {
+        issues.push(`${name} missing: ${dirPath}`);
+      }
+    }
+
+    // Check if required files exist
+    const requiredFiles = [
+      { path: this.historyFile, name: 'History file' },
+      { path: this.aliasesFile, name: 'Aliases file' }
+    ];
+
+    for (const { path: filePath, name } of requiredFiles) {
+      if (!await fs.pathExists(filePath)) {
+        issues.push(`${name} missing: ${filePath}`);
+      }
+    }
+
+    // Validate JSON files
     try {
-      const stats = await fs.stat(dirPath);
-      if (stats.isFile()) {
-        return stats.size;
-      }
-
-      let totalSize = 0;
-      const items = await fs.readdir(dirPath);
-
-      for (const item of items) {
-        const itemPath = path.join(dirPath, item);
-        totalSize += await this.getDirectorySize(itemPath);
-      }
-
-      return totalSize;
+      await fs.readJson(this.historyFile);
     } catch (error) {
-      return 0;
+      issues.push(`History file is corrupted: ${error.message}`);
+    }
+
+    return {
+      valid: issues.length === 0,
+      issues
+    };
+  }
+
+  /**
+   * Update configuration file
+   */
+  async _updateConfig(updates) {
+    try {
+      let config = this.defaultConfig;
+      
+      if (await fs.pathExists(this.configFile)) {
+        config = await fs.readJson(this.configFile);
+      }
+      
+      const updatedConfig = { ...config, ...updates, lastUpdated: new Date().toISOString() };
+      await fs.writeJson(this.configFile, updatedConfig, { spaces: 2 });
+      
+    } catch (error) {
+      throw new Error(`Failed to update configuration: ${error.message}`);
     }
   }
 
   /**
-   * 获取配置路径信息
+   * Attempt automatic repair of configuration issues
    */
-  getPaths() {
+  async _attemptAutoRepair(issues) {
+    for (const issue of issues) {
+      try {
+        if (issue.includes('missing')) {
+          if (issue.includes('directory')) {
+            await this.ensureDirectories();
+          } else if (issue.includes('file')) {
+            await this.ensureFiles();
+          }
+        } else if (issue.includes('corrupted')) {
+          if (issue.includes('History file')) {
+            await fs.writeJson(this.historyFile, {
+              version: '1.0',
+              created: new Date().toISOString(),
+              backups: []
+            }, { spaces: 2 });
+          }
+        }
+      } catch (repairError) {
+        console.warn(`Failed to auto-repair issue "${issue}": ${repairError.message}`);
+      }
+    }
+  }
+
+  /**
+   * Get current configuration
+   */
+  async getConfig() {
+    if (await fs.pathExists(this.configFile)) {
+      return await fs.readJson(this.configFile);
+    }
+    return this.defaultConfig;
+  }
+
+  /**
+   * Reset configuration to defaults
+   */
+  async reset() {
+    try {
+      await this._checkLock();
+      await this._createLock();
+
+      // Create backup before reset
+      const BackupManager = require('./BackupManager');
+      const backupManager = new BackupManager(this.configDir, this.claudeDir);
+      await backupManager.createBackup('Pre-reset backup');
+
+      // Remove and recreate directories
+      await fs.remove(this.configDir);
+      await fs.remove(this.claudeDir);
+
+      // Reinitialize
+      await this.init();
+
+    } catch (error) {
+      await this._releaseLock();
+      throw new Error(`Reset failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Export configuration for backup or migration
+   */
+  async exportConfig() {
+    const config = await this.getConfig();
+    const systemInfo = await this.getSystemInfo();
+    
     return {
-      configDir: this.configDir,
-      providersDir: this.providersDir,
-      aliasesFile: this.aliasesFile,
-      backupDir: this.backupDir,
-      claudeDir: this.claudeDir,
-      historyFile: this.historyFile,
+      metadata: {
+        exported: new Date().toISOString(),
+        version: '2.0.0',
+        platform: systemInfo.platform
+      },
+      config,
+      // Note: Providers are handled separately for security
+      directories: {
+        configDir: this.configDir,
+        claudeDir: this.claudeDir,
+        providersDir: this.providersDir,
+        backupsDir: this.backupsDir
+      }
     };
   }
 }

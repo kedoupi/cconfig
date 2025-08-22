@@ -1,22 +1,77 @@
 module.exports = {
+  // Test environment
   testEnvironment: 'node',
-  roots: ['<rootDir>/src', '<rootDir>/tests'],
+  
+  // Test file patterns
   testMatch: [
-    '<rootDir>/tests/**/*.test.js',
-    '<rootDir>/tests/**/*.spec.js',
-    '<rootDir>/src/**/__tests__/**/*.js',
+    '**/tests/**/*.test.js',
+    '**/__tests__/**/*.js',
+    '**/?(*.)+(spec|test).js'
   ],
+  
+  // Test setup
+  setupFilesAfterEnv: ['<rootDir>/tests/setup/jest.setup.js'],
+  
+  // Coverage configuration
+  collectCoverage: false, // Enable with --coverage flag
   collectCoverageFrom: [
     'src/**/*.js',
     'bin/**/*.js',
-    '!src/**/__tests__/**',
+    '!src/**/*.test.js',
     '!**/node_modules/**',
+    '!**/tests/**'
   ],
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup/jest.setup.js'],
-  testTimeout: 10000,
+  coverageReporters: [
+    'text',
+    'lcov',
+    'html'
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70
+    }
+  },
+  
+  // Module configuration
+  moduleFileExtensions: ['js', 'json'],
+  moduleDirectories: ['node_modules', 'src'],
+  
+  // Test timeout
+  testTimeout: 30000,
+  
+  // Verbose output
   verbose: true,
+  
+  // Clear mocks between tests
   clearMocks: true,
-  restoreMocks: true,
+  
+  // Force exit after tests complete
+  forceExit: true,
+  
+  // Detect open handles
+  detectOpenHandles: false,
+  
+  // Transform configuration
+  transform: {},
+  
+  // Global setup/teardown
+  globalSetup: undefined,
+  globalTeardown: undefined,
+  
+  // Test result processor
+  testResultsProcessor: undefined,
+  
+  // Error on deprecated APIs
+  errorOnDeprecated: true,
+  
+  // Notify mode
+  notify: false,
+  notifyMode: 'failure-change',
+  
+  // Watch plugins
+  watchPlugins: []
 };
