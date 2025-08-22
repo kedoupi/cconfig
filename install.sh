@@ -495,18 +495,96 @@ deploy_local_templates() {
     mkdir -p "$CLAUDE_CONFIG_DIR/agents"
     mkdir -p "$CLAUDE_CONFIG_DIR/output-styles"
     
+    # Try multiple sources for configuration templates
+    local template_source=""
+    
+    # 1. Try script directory (for development)
     if [ -d "$script_dir/.claude" ]; then
-        info "Found local configuration templates"
-        cp -r "$script_dir/.claude"/* "$CLAUDE_CONFIG_DIR/"
-        success "Local configuration templates deployed successfully"
+        template_source="$script_dir/.claude"
+        info "Found configuration templates in script directory"
+    else
+        # 2. Try npm global package (most common case for users)
+        template_source=$(get_npm_package_template_path)
+        if [ -n "$template_source" ] && [ -d "$template_source" ]; then
+            info "Found configuration templates in npm package"
+        else
+            # 3. Last resort: create minimal config
+            warn "No configuration templates found anywhere"
+            warn "Creating minimal configuration..."
+            create_minimal_config
+            return
+        fi
+    fi
+    
+    # Deploy the templates
+    if [ -n "$template_source" ]; then
+        cp -r "$template_source"/* "$CLAUDE_CONFIG_DIR/"
+        success "Configuration templates deployed successfully from $(basename "$(dirname "$template_source")")"
         
         # List deployed components
         list_deployed_components
-    else
-        warn "No local configuration templates found"
-        warn "Creating minimal configuration..."
-        create_minimal_config
     fi
+}
+
+# Get npm package template path
+get_npm_package_template_path() {
+    # Try to find the npm package location
+    local npm_global_root
+    local package_path
+    
+    # Method 1: Use npm root -g
+    if command_exists npm; then
+        npm_global_root=$(npm root -g 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$npm_global_root" ]; then
+            package_path="$npm_global_root/@kedoupi/claude-code-kit/.claude"
+            if [ -d "$package_path" ]; then
+                echo "$package_path"
+                return 0
+            fi
+        fi
+    fi
+    
+    # Method 2: Try common npm global locations
+    local common_paths=(
+        "/usr/local/lib/node_modules/@kedoupi/claude-code-kit/.claude"
+        "$HOME/.npm-global/lib/node_modules/@kedoupi/claude-code-kit/.claude"
+        "/usr/lib/node_modules/@kedoupi/claude-code-kit/.claude"
+    )
+    
+    # Add NVM paths if they exist
+    if [ -n "${NVM_DIR:-}" ]; then
+        local nvm_current_version
+        nvm_current_version=$(node --version 2>/dev/null | sed 's/v//')
+        if [ -n "$nvm_current_version" ]; then
+            common_paths+=(
+                "$NVM_DIR/versions/node/v$nvm_current_version/lib/node_modules/@kedoupi/claude-code-kit/.claude"
+            )
+        fi
+    fi
+    
+    for path in "${common_paths[@]}"; do
+        if [ -d "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+    
+    # Method 3: Try to use which cc-config to find installation path
+    if command_exists cc-config; then
+        local cc_config_path
+        cc_config_path=$(which cc-config 2>/dev/null)
+        if [ -n "$cc_config_path" ]; then
+            # cc-config is usually at: /path/to/node_modules/@kedoupi/claude-code-kit/bin/cc-config.js
+            local package_root
+            package_root=$(dirname "$(dirname "$cc_config_path")")"/.claude"
+            if [ -d "$package_root" ]; then
+                echo "$package_root"
+                return 0
+            fi
+        fi
+    fi
+    
+    return 1
 }
 
 # List deployed components

@@ -1,6 +1,6 @@
 {
   "name": "@kedoupi/claude-code-kit",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Claude Code configuration toolkit for managing configurations and providers",
   "main": "src/index.js",
   "bin": {
