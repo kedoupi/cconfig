@@ -38,7 +38,7 @@ const program = new Command();
 program
   .name('cc-config')
   .description('Claude Code Kit Configuration Manager')
-  .version('1.0.0');
+  .version('1.0.7');
 
 
 // Provider management commands
