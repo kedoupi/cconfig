@@ -489,90 +489,40 @@ EOF
     success "Claude Code Kit directories created"
 }
 
-# Configure default provider
+# Skip provider configuration during installation
 configure_default_provider() {
     echo
-    echo -e "${BLUE}🔑 API Configuration${NC}"
+    echo -e "${BLUE}🔑 Provider Configuration${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}To use Claude, you need an API key from Anthropic.${NC}"
+    echo -e "${YELLOW}📋 Provider setup will be handled after installation.${NC}"
     echo
-    echo -e "${YELLOW}💡 How to get your API key:${NC}"
+    echo -e "${BLUE}After installation completes, you'll use:${NC}"
+    echo "  cc-config provider add"
+    echo
+    echo -e "${YELLOW}💡 To get your API key:${NC}"
     echo "  1. Visit: https://console.anthropic.com/"
-    echo "  2. Sign up or log in to your account"
+    echo "  2. Sign up or log in to your account" 
     echo "  3. Go to API Keys section"
     echo "  4. Create a new API key"
     echo
     
-    # Get API Key with better prompting
-    while true; do
-        echo -e "${BLUE}🔐 Enter your Anthropic API key:${NC}"
-        echo -n "API Key: "
-        read -s api_key
-        echo
-        
-        if [ -n "$api_key" ]; then
-            # Basic validation
-            if [ ${#api_key} -lt 10 ]; then
-                warn "API Key seems too short. Please check and try again."
-                continue
-            fi
-            break
-        else
-            warn "API Key cannot be empty. Please try again."
-        fi
-    done
-    
-    # Use default base URL without asking (most users won't change this)
-    base_url="https://api.anthropic.com"
-    
-    # Create default provider configuration
-    cat > "$PROVIDERS_DIR/default.json" << EOF
-{
-    "alias": "claude",
-    "baseURL": "$base_url",
-    "apiKey": "$api_key",
-    "timeout": "3000000"
-}
-EOF
-    
-    success "API configuration saved successfully!"
-    info "You can manage providers later with: cc-config provider list"
+    info "Provider configuration will be done post-installation"
 }
 
-# Ask about additional provider (simplified)
+# Skip additional provider configuration during installation
 configure_additional_provider() {
     echo
-    echo -e "${BLUE}🔧 Advanced Configuration (Optional)${NC}"
-    echo -n "Would you like to add additional API providers? (y/N): "
-    read -r add_provider
+    echo -e "${BLUE}🔧 Post-Installation Setup${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${YELLOW}📋 Providers will be configured after installation.${NC}"
+    echo
+    echo -e "${BLUE}Commands you'll use:${NC}"
+    echo "  cc-config provider add          # Add your first provider"
+    echo "  cc-config provider list         # List all providers"
+    echo "  cc-config provider show <alias> # View provider details"
+    echo
     
-    if [[ "$add_provider" =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}ℹ️  You can add more providers later with:${NC}"
-        echo "   cc-config provider add"
-        echo
-        echo -n "Provider alias (e.g., 'claude-work'): "
-        read alias
-        
-        echo -n "API Key: "
-        read -s api_key
-        echo
-        
-        if [ -n "$alias" ] && [ -n "$api_key" ]; then
-            cat > "$PROVIDERS_DIR/$alias.json" << EOF
-{
-    "alias": "$alias",
-    "baseURL": "https://api.anthropic.com", 
-    "apiKey": "$api_key",
-    "timeout": "3000000"
-}
-EOF
-            success "Additional provider '$alias' configured"
-        else
-            info "Skipped additional provider setup"
-        fi
-    else
-        info "You can add more providers anytime with: cc-config provider add"
-    fi
+    info "All provider management will be done through cc-config commands"
 }
 
 # Generate shell aliases
@@ -815,10 +765,10 @@ main() {
     step "Deploying configuration templates"
     deploy_configurations
     
-    step "Configuring default provider"
+    step "Preparing provider configuration"
     configure_default_provider
     
-    step "Setting up additional providers"
+    step "Setting up post-installation guide"
     configure_additional_provider
     
     step "Generating shell aliases"
@@ -843,9 +793,9 @@ main() {
     echo
     echo -e "${BLUE}🚀 Next steps:${NC}"
     echo "  1️⃣  Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)"
-    echo "  2️⃣  Test installation: claude --version"
-    echo "  3️⃣  Start chatting: claude \"Hello, Claude!\""
-    echo "  4️⃣  Manage providers: cc-config provider list"
+    echo "  2️⃣  Add your first API provider: cc-config provider add"
+    echo "  3️⃣  Test installation: cc-config status"
+    echo "  4️⃣  Start chatting with your alias: <your-alias> \"Hello, Claude!\""
     echo
     echo -e "${BLUE}📚 Need help?${NC}"
     echo "  🌐 Documentation: https://github.com/kedoupi/claude-code-kit"
