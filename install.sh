@@ -69,7 +69,7 @@ RECOMMENDED_NODE_VERSION="22"
 
 # Installation progress tracking
 CURRENT_STEP=0
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 
 # Progress indicator function
 step() {
@@ -420,8 +420,21 @@ deploy_configurations() {
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     
     if [ -d "$script_dir/.claude" ]; then
+        info "Found complete configuration templates in project directory"
         cp -r "$script_dir/.claude"/* "$CLAUDE_CONFIG_DIR/"
-        success "Configuration templates deployed successfully"
+        success "Complete configuration templates deployed successfully"
+        
+        # List deployed components
+        info "Deployed components:"
+        if [ -d "$CLAUDE_CONFIG_DIR/agents" ]; then
+            echo "  • $(ls "$CLAUDE_CONFIG_DIR/agents" | wc -l | tr -d ' ') agent definitions"
+        fi
+        if [ -d "$CLAUDE_CONFIG_DIR/commands" ]; then
+            echo "  • $(ls "$CLAUDE_CONFIG_DIR/commands" | wc -l | tr -d ' ') command templates"
+        fi
+        if [ -d "$CLAUDE_CONFIG_DIR/output-styles" ]; then
+            echo "  • $(ls "$CLAUDE_CONFIG_DIR/output-styles" | wc -l | tr -d ' ') output styles"
+        fi
     else
         warn "Configuration templates not found in $script_dir/.claude"
         warn "Creating minimal configuration..."
@@ -637,23 +650,40 @@ setup_shell_integration() {
     fi
 }
 
-# Install cc-config tool
+# Install cc-config tool from npm
 install_cc_config_tool() {
-    info "Installing cc-config tool..."
+    info "Installing cc-config tool from npm..."
     
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # Install from npm registry (production installation)
+    local install_attempts=0
+    local max_attempts=3
     
-    # Install Node.js dependencies if package.json exists
-    if [ -f "$script_dir/package.json" ]; then
-        cd "$script_dir"
-        npm install
+    while [ $install_attempts -lt $max_attempts ]; do
+        install_attempts=$((install_attempts + 1))
+        debug "cc-config installation attempt $install_attempts of $max_attempts"
         
-        # Create global symlink for cc-config
-        npm link
-        success "cc-config tool installed globally"
+        if npm install -g @kedoupi/claude-code-kit; then
+            success "cc-config tool installed globally from npm"
+            break
+        else
+            if [ $install_attempts -eq $max_attempts ]; then
+                error "Failed to install cc-config tool after $max_attempts attempts"
+            else
+                warn "Installation attempt $install_attempts failed. Retrying..."
+                sleep 2
+            fi
+        fi
+    done
+    
+    # Verify installation
+    if command_exists cc-config; then
+        local cc_version
+        cc_version=$(cc-config --version 2>/dev/null || echo "unknown")
+        success "cc-config tool verified successfully"
+        info "cc-config version: $cc_version"
+        debug "cc-config location: $(which cc-config)"
     else
-        warn "cc-config tool not available in this installation"
+        error "cc-config tool installation verification failed"
     fi
 }
 
@@ -793,6 +823,9 @@ main() {
     
     step "Generating shell aliases"
     generate_aliases
+    
+    step "Installing cc-config management tool"
+    install_cc_config_tool
     
     step "Configuring shell integration"
     setup_shell_integration
