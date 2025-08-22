@@ -470,6 +470,103 @@ async function stats() {
   }
 }
 
+/**
+ * 获取指定服务商配置
+ */
+async function get(name, options) {
+  try {
+    const provider = await providerManager.getProvider(name);
+
+    if (options.json) {
+      // JSON格式输出，隐藏敏感信息
+      const safeProvider = {
+        ...provider,
+        apiKey: provider.apiKey ? '[ENCRYPTED]' : null,
+      };
+      console.log(JSON.stringify(safeProvider, null, 2));
+    } else {
+      // 友好格式输出
+      console.log(chalk.blue(`🔧 服务商配置: ${name}\n`));
+      console.log(`别名: ${chalk.cyan(provider.alias)}`);
+      console.log(`URL: ${provider.baseURL}`);
+      console.log(`API密钥: ${provider.apiKey ? '***已设置***' : '未设置'}`);
+      console.log(`超时: ${provider.timeout / 1000}秒`);
+      console.log(`状态: ${provider.enabled ? chalk.green('启用') : chalk.red('禁用')}`);
+      if (provider.description) {
+        console.log(`描述: ${provider.description}`);
+      }
+      if (provider.metadata) {
+        console.log(`\n元数据:`);
+        console.log(`  创建时间: ${new Date(provider.metadata.created).toLocaleString()}`);
+        console.log(`  修改时间: ${new Date(provider.metadata.modified).toLocaleString()}`);
+        console.log(`  版本: ${provider.metadata.version}`);
+      }
+    }
+  } catch (error) {
+    handleError(error);
+    process.exit(1);
+  }
+}
+
+/**
+ * 重新生成别名配置
+ */
+async function regenerateAliases(options) {
+  try {
+    console.log(chalk.blue('🔄 重新生成别名配置'));
+
+    const configStorage = providerManager.configStorage;
+    const aliasGenerator = new AliasGenerator(configStorage);
+
+    // 生成别名配置
+    const script = await aliasGenerator.generateAliases();
+
+    if (!script) {
+      handleWarning('没有启用的服务商配置，生成空的别名文件');
+    } else {
+      handleSuccess('别名配置生成成功');
+    }
+
+    // 显示统计信息
+    const stats = await aliasGenerator.getAliasStats();
+    console.log(`\n📊 生成统计:`);
+    console.log(`   总服务商: ${stats.total}`);
+    console.log(`   启用别名: ${chalk.green(stats.enabled)}`);
+    console.log(`   禁用别名: ${chalk.red(stats.disabled)}`);
+
+    if (stats.enabled > 0) {
+      console.log(chalk.blue('\n🔗 可用别名:'));
+      stats.aliases
+        .filter(a => a.enabled)
+        .forEach(alias => {
+          console.log(`   ${chalk.cyan(alias.alias)} - ${alias.description || '无描述'}`);
+        });
+    }
+
+    // 验证配置
+    try {
+      const validation = await aliasGenerator.validateAliases();
+      if (!validation.valid) {
+        console.log(chalk.yellow('\n⚠️ 发现配置问题:'));
+        validation.issues.forEach(issue => {
+          const icon = issue.severity === 'error' ? '❌' : '⚠️';
+          console.log(`   ${icon} ${issue.message}`);
+        });
+      }
+    } catch (validationError) {
+      handleWarning(`配置验证失败: ${validationError.message}`);
+    }
+
+    // 提示下一步操作
+    console.log(chalk.yellow('\n📝 下一步操作:'));
+    console.log('1. 重新加载Shell配置: source ~/.zshrc (或 ~/.bashrc)');
+    console.log('2. 或者运行: cc-config alias install');
+  } catch (error) {
+    handleError(error);
+    process.exit(1);
+  }
+}
+
 module.exports = {
   add,
   list,
@@ -477,4 +574,6 @@ module.exports = {
   remove,
   test,
   stats,
+  get,
+  regenerateAliases,
 };

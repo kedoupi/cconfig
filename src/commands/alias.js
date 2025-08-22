@@ -1,5 +1,6 @@
 const chalk = require('chalk');
 const ConfigManager = require('../core/ConfigManager');
+const ConfigStorage = require('../core/ConfigStorage');
 const AliasGenerator = require('../core/AliasGenerator');
 const {
   handleError,
@@ -9,7 +10,8 @@ const {
 } = require('../utils/errorHandler');
 
 const configManager = new ConfigManager();
-const aliasGenerator = new AliasGenerator(configManager);
+const configStorage = new ConfigStorage();
+const aliasGenerator = new AliasGenerator(configStorage);
 
 /**
  * 生成Shell别名配置
@@ -30,7 +32,7 @@ async function generate(_options) {
     }
 
     handleSuccess('别名配置生成成功');
-    console.log(chalk.gray(`别名文件: ${configManager.aliasesFile}`));
+    console.log(chalk.gray(`别名文件: ${aliasGenerator.aliasesFile}`));
 
     // 显示生成的别名
     const stats = await aliasGenerator.getAliasStats();
@@ -49,7 +51,7 @@ async function generate(_options) {
     console.log(chalk.yellow('\n📝 下一步操作:'));
     console.log('1. 安装别名到Shell配置: cc-config alias install');
     console.log('2. 或者手动添加到Shell配置文件:');
-    console.log(`   echo "source ${configManager.aliasesFile}" >> ~/.zshrc`);
+    console.log(`   echo "source ${aliasGenerator.aliasesFile}" >> ~/.zshrc`);
     console.log('3. 重新加载Shell配置: source ~/.zshrc');
   } catch (error) {
     handleError(error);
@@ -203,7 +205,7 @@ async function stats() {
     console.log(chalk.green('🐚 Shell信息:'));
     console.log(`   当前Shell: ${shell}`);
     console.log(`   配置文件: ${configFile}`);
-    console.log(`   别名文件: ${configManager.aliasesFile}`);
+    console.log(`   别名文件: ${aliasGenerator.aliasesFile}`);
     console.log();
 
     // 别名列表
@@ -228,7 +230,7 @@ async function stats() {
       console.log(chalk.green('🔍 配置状态:'));
 
       // 检查别名文件是否存在
-      const aliasFileExists = await fs.exists(configManager.aliasesFile);
+      const aliasFileExists = await fs.exists(aliasGenerator.aliasesFile);
       console.log(
         `   别名文件: ${aliasFileExists ? chalk.green('✅ 存在') : chalk.red('❌ 不存在')}`
       );

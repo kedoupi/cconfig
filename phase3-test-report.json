@@ -1,0 +1,112 @@
+{
+  "timestamp": "2025-08-22T03:21:46.689Z",
+  "phase": "Phase 3 - 配置管理CLI",
+  "summary": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "passRate": 100
+  },
+  "details": [
+    {
+      "name": "CLI帮助信息",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "CLI版本信息",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Provider子命令",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Alias子命令",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Status命令",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Provider列表命令",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Provider统计命令",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Provider别名重新生成",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "配置目录初始化",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "配置目录结构",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "别名文件生成",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "别名统计信息",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "别名配置验证",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "别名文件存在",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "配置向导帮助",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Provider添加帮助",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "Provider编辑帮助",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "整体状态查看",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "备份命令可用",
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "部署命令可用",
+      "passed": true,
+      "error": null
+    }
+  ]
+}

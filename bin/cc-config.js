@@ -68,6 +68,18 @@ providerCmd
   .action(providerCommands.stats);
 
 providerCmd
+  .command('get <name>')
+  .description('获取指定服务商配置')
+  .option('--json', '以JSON格式输出', false)
+  .action(providerCommands.get);
+
+providerCmd
+  .command('regenerate-aliases')
+  .description('重新生成别名配置')
+  .option('-f, --force', '强制重新生成', false)
+  .action(providerCommands.regenerateAliases);
+
+providerCmd
   .command('wizard')
   .description('交互式服务商配置向导')
   .option('-m, --mode <mode>', '配置模式 (template|quick|advanced)', 'template')
@@ -279,12 +291,14 @@ program
   .action(async () => {
     try {
       const ConfigManager = require('../src/core/ConfigManager');
+      const ConfigStorage = require('../src/core/ConfigStorage');
       const ProviderManager = require('../src/core/ProviderManager');
       const AliasGenerator = require('../src/core/AliasGenerator');
 
       const configManager = new ConfigManager();
+      const configStorage = new ConfigStorage();
       const providerManager = new ProviderManager();
-      const aliasGenerator = new AliasGenerator(configManager);
+      const aliasGenerator = new AliasGenerator(configStorage);
 
       console.log(chalk.blue('📊 Claude Code Kit 状态信息\n'));
 
@@ -294,7 +308,7 @@ program
       console.log(`   主目录: ${paths.configDir}`);
       console.log(`   服务商: ${paths.providersDir}`);
       console.log(`   备份: ${paths.backupDir}`);
-      console.log(`   别名: ${paths.aliasesFile}`);
+      console.log(`   别名: ${aliasGenerator.aliasesFile}`);
       console.log();
 
       // 服务商统计
