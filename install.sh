@@ -310,6 +310,14 @@ install_application() {
     cp -r package.json src bin "$INSTALL_DIR/"
     cp -r node_modules "$INSTALL_DIR/"
     
+    # 复制配置模板
+    if [ -d ".claude-templates" ]; then
+        cp -r .claude-templates "$INSTALL_DIR/"
+        print_success "配置模板复制完成"
+    else
+        print_warning "未找到配置模板目录"
+    fi
+    
     # 创建可执行文件链接
     local cli_script="$INSTALL_DIR/bin/cc-config.js"
     local cli_link="$BIN_DIR/$CLI_COMMAND"
@@ -324,6 +332,249 @@ install_application() {
     rm -rf "$temp_dir"
     
     print_success "应用安装完成"
+}
+
+# 备份现有配置
+backup_existing_config() {
+    print_step "备份现有配置..."
+    
+    local claude_dir="$HOME/.claude"
+    local cc_config_dir="$HOME/.cc-config"
+    local backup_base="$HOME/.claude-config-backup"
+    local timestamp=$(date +%Y%m%d-%H%M%S)
+    local backup_dir="$backup_base/$timestamp"
+    
+    local has_backup=false
+    
+    # 备份 .claude 目录
+    if [ -d "$claude_dir" ]; then
+        print_info "发现现有 .claude 配置"
+        safe_mkdir "$backup_dir" 700
+        cp -r "$claude_dir" "$backup_dir/claude" 2>/dev/null || true
+        log_info "已备份 .claude 目录到 $backup_dir/claude"
+        has_backup=true
+    fi
+    
+    # 备份 .cc-config 目录
+    if [ -d "$cc_config_dir" ]; then
+        print_info "发现现有 .cc-config 配置"
+        if [ "$has_backup" = false ]; then
+            safe_mkdir "$backup_dir" 700
+        fi
+        cp -r "$cc_config_dir" "$backup_dir/cc-config" 2>/dev/null || true
+        log_info "已备份 .cc-config 目录到 $backup_dir/cc-config"
+        has_backup=true
+    fi
+    
+    if [ "$has_backup" = true ]; then
+        print_success "配置备份完成: $backup_dir"
+        
+        # 创建备份信息文件
+        cat > "$backup_dir/backup-info.txt" << EOF
+Claude Code Kit 配置备份
+备份时间: $(date)
+备份目录: $backup_dir
+安装版本: 1.0.0
+
+恢复方法:
+1. 停止所有 Claude Code 进程
+2. 删除当前配置: rm -rf ~/.claude ~/.cc-config
+3. 恢复备份: cp -r $backup_dir/claude ~/.claude && cp -r $backup_dir/cc-config ~/.cc-config
+EOF
+        
+        # 保留最近的5个备份
+        local backup_count=$(ls -1 "$backup_base" 2>/dev/null | wc -l)
+        if [ "$backup_count" -gt 5 ]; then
+            print_debug "清理旧备份，保留最近5个"
+            ls -1t "$backup_base" | tail -n +6 | while read -r old_backup; do
+                rm -rf "$backup_base/$old_backup" 2>/dev/null || true
+                log_info "已清理旧备份: $old_backup"
+            done
+        fi
+    else
+        print_info "未发现现有配置，跳过备份"
+    fi
+}
+
+# 部署配置模板
+deploy_config_templates() {
+    print_step "部署配置模板..."
+    
+    local claude_dir="$HOME/.claude"
+    local templates_dir="$INSTALL_DIR/.claude-templates"
+    
+    # 确保目标目录存在
+    safe_mkdir "$claude_dir" 700
+    
+    # 检查是否有模板文件
+    if [ ! -d "$templates_dir" ]; then
+        print_warning "未找到配置模板，跳过模板部署"
+        return 0
+    fi
+    
+    # 部署 settings.json
+    if [ -f "$templates_dir/settings.json" ]; then
+        if [ ! -f "$claude_dir/settings.json" ]; then
+            cp "$templates_dir/settings.json" "$claude_dir/settings.json"
+            chmod 600 "$claude_dir/settings.json"
+            print_success "已部署 settings.json 模板"
+        else
+            print_info "settings.json 已存在，跳过"
+        fi
+    fi
+    
+    # 部署 CLAUDE.md
+    if [ -f "$templates_dir/CLAUDE.md" ]; then
+        if [ ! -f "$claude_dir/CLAUDE.md" ]; then
+            cp "$templates_dir/CLAUDE.md" "$claude_dir/CLAUDE.md"
+            chmod 644 "$claude_dir/CLAUDE.md"
+            print_success "已部署 CLAUDE.md 模板"
+        else
+            print_info "CLAUDE.md 已存在，跳过"
+        fi
+    fi
+    
+    # 部署 commands 目录
+    if [ -d "$templates_dir/commands" ]; then
+        local commands_dir="$claude_dir/commands"
+        safe_mkdir "$commands_dir" 755
+        
+        cp -r "$templates_dir/commands/"* "$commands_dir/" 2>/dev/null || true
+        find "$commands_dir" -type f -name "*.js" -exec chmod 644 {} \;
+        print_success "已部署 commands 模板"
+    fi
+    
+    # 部署 agents 目录
+    if [ -d "$templates_dir/agents" ]; then
+        local agents_dir="$claude_dir/agents"
+        safe_mkdir "$agents_dir" 755
+        
+        cp -r "$templates_dir/agents/"* "$agents_dir/" 2>/dev/null || true
+        find "$agents_dir" -type f -name "*.md" -exec chmod 644 {} \;
+        print_success "已部署 agents 模板"
+    fi
+    
+    # 部署 output-styles 目录
+    if [ -d "$templates_dir/output-styles" ]; then
+        local styles_dir="$claude_dir/output-styles"
+        safe_mkdir "$styles_dir" 755
+        
+        cp -r "$templates_dir/output-styles/"* "$styles_dir/" 2>/dev/null || true
+        find "$styles_dir" -type f -name "*.json" -exec chmod 644 {} \;
+        print_success "已部署 output-styles 模板"
+    fi
+    
+    print_success "配置模板部署完成"
+}
+
+# 创建完整目录结构
+create_full_directory_structure() {
+    print_step "创建完整目录结构..."
+    
+    local claude_dir="$HOME/.claude"
+    local cc_config_dir="$HOME/.cc-config"
+    
+    # Claude Code 目录结构
+    local claude_subdirs=(
+        "commands"
+        "agents" 
+        "output-styles"
+        "projects"
+        "shell-snapshots"
+    )
+    
+    # CC Config 目录结构
+    local cc_config_subdirs=(
+        "providers"
+        "backups"
+        "logs"
+    )
+    
+    # 创建 .claude 子目录
+    for subdir in "${claude_subdirs[@]}"; do
+        safe_mkdir "$claude_dir/$subdir" 755
+        log_debug "创建目录: $claude_dir/$subdir"
+    done
+    
+    # 创建 .cc-config 子目录
+    for subdir in "${cc_config_subdirs[@]}"; do
+        safe_mkdir "$cc_config_dir/$subdir" 700
+        log_debug "创建目录: $cc_config_dir/$subdir"
+    done
+    
+    print_success "目录结构创建完成"
+}
+
+# 设置文件权限和验证
+setup_permissions_and_verify() {
+    print_step "设置文件权限和验证..."
+    
+    local claude_dir="$HOME/.claude"
+    local cc_config_dir="$HOME/.cc-config"
+    
+    # 设置 .claude 目录权限
+    if [ -d "$claude_dir" ]; then
+        chmod 700 "$claude_dir"
+        
+        # 设置敏感文件权限
+        [ -f "$claude_dir/settings.json" ] && chmod 600 "$claude_dir/settings.json"
+        
+        # 设置子目录权限
+        find "$claude_dir" -type d -exec chmod 755 {} \; 2>/dev/null || true
+        find "$claude_dir" -type f -name "*.json" -exec chmod 644 {} \; 2>/dev/null || true
+        find "$claude_dir" -type f -name "*.md" -exec chmod 644 {} \; 2>/dev/null || true
+        find "$claude_dir" -type f -name "*.js" -exec chmod 644 {} \; 2>/dev/null || true
+        
+        print_success "已设置 .claude 目录权限"
+    fi
+    
+    # 设置 .cc-config 目录权限
+    if [ -d "$cc_config_dir" ]; then
+        chmod 700 "$cc_config_dir"
+        find "$cc_config_dir" -type d -exec chmod 700 {} \; 2>/dev/null || true
+        find "$cc_config_dir" -type f -exec chmod 600 {} \; 2>/dev/null || true
+        
+        print_success "已设置 .cc-config 目录权限"
+    fi
+    
+    # 验证关键文件
+    local verification_errors=0
+    
+    # 验证必要目录
+    local required_dirs=(
+        "$claude_dir"
+        "$cc_config_dir"
+        "$cc_config_dir/providers"
+        "$cc_config_dir/backups"
+    )
+    
+    for dir in "${required_dirs[@]}"; do
+        if [ ! -d "$dir" ]; then
+            print_error "缺少必要目录: $dir"
+            verification_errors=$((verification_errors + 1))
+        else
+            log_debug "验证目录存在: $dir"
+        fi
+    done
+    
+    # 验证配置文件格式
+    if [ -f "$claude_dir/settings.json" ]; then
+        if command_exists node; then
+            if ! node -e "JSON.parse(require('fs').readFileSync('$claude_dir/settings.json', 'utf8'))" 2>/dev/null; then
+                print_error "settings.json 格式无效"
+                verification_errors=$((verification_errors + 1))
+            else
+                log_debug "settings.json 格式验证通过"
+            fi
+        fi
+    fi
+    
+    if [ "$verification_errors" -eq 0 ]; then
+        print_success "权限设置和验证完成"
+    else
+        print_error "验证过程中发现 $verification_errors 个错误"
+        return 1
+    fi
 }
 
 # 初始化配置
@@ -420,6 +671,16 @@ show_completion() {
     echo ""
     echo "  4. 生成和安装别名"
     echo "     $CLI_COMMAND alias install"
+    echo ""
+    echo "  5. 部署配置模板 (可选)"
+    echo "     $CLI_COMMAND deploy --template external"
+    echo ""
+    print_message "$GREEN" "🎯 已安装的功能:"
+    echo "  • 配置模板系统 (settings.json, CLAUDE.md)"
+    echo "  • 智能命令系统 (/ask, /specs, /workflow)"
+    echo "  • 专业化Agent系统 (architect, backend-dev, frontend-dev)"
+    echo "  • 多样化输出样式 (concise, detailed, development)"
+    echo "  • 完整的配置管理和备份系统"
     echo ""
     print_message "$CYAN" "📚 更多信息:"
     echo "  GitHub: $REPO_URL"
@@ -597,8 +858,12 @@ main() {
     check_disk_space
     check_system
     check_nodejs
+    backup_existing_config
     create_directories
     install_application
+    create_full_directory_structure
+    deploy_config_templates
+    setup_permissions_and_verify
     initialize_config
     setup_path
     verify_installation
