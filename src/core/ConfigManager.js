@@ -10,7 +10,7 @@ const path = require('path');
 const os = require('os');
 
 class ConfigManager {
-  constructor(configDir = path.join(os.homedir(), '.cc-config')) {
+  constructor(configDir = path.join(os.homedir(), '.ccvm')) {
     this.configDir = configDir;
     this.claudeDir = path.join(os.homedir(), '.claude');
     this.providersDir = path.join(configDir, 'providers');
@@ -268,10 +268,10 @@ Use the \`cc-config\` command to manage providers:
 - \`cc-config status\`: Check system status
 
 ## Configuration Files
-- Main config: \`~/.cc-config/config.json\`
-- Providers: \`~/.cc-config/providers/*.json\`
-- Aliases: \`~/.cc-config/aliases.sh\`
-- Backups: \`~/.cc-config/backups/\`
+- Main config: \`~/.ccvm/config.json\`
+- Providers: \`~/.ccvm/providers/*.json\`
+- Aliases: \`~/.ccvm/aliases.sh\`
+- Backups: \`~/.ccvm/backups/\`
 
 For more information, visit: https://github.com/kedoupi/claude-code-kit
 `;

@@ -35,7 +35,7 @@ class AliasGenerator {
       await this._validateProviders(providers);
       
       // Generate alias content
-      const aliasContent = this.buildAliasContent(providers);
+      const aliasContent = await this.buildAliasContent(providers);
       
       // Create backup of existing aliases file
       await this._backupExistingAliases();
@@ -89,13 +89,14 @@ class AliasGenerator {
   /**
    * Build the complete alias file content
    */
-  buildAliasContent(providers) {
+  async buildAliasContent(providers) {
     const header = this.generateHeader();
     const helperFunctions = this.generateHelperFunctions();
     const aliases = this.generateProviderAliases(providers);
+    const defaultClaude = await this.generateDefaultClaudeAlias();
     const footer = this.generateFooter(providers);
 
-    return [header, helperFunctions, aliases, footer].join('\n\n');
+    return [header, helperFunctions, aliases, defaultClaude, footer].join('\n\n');
   }
 
   /**
@@ -136,7 +137,7 @@ _cc_load_config() {
     
     if [ ! -f "$config_file" ]; then
         echo "Error: Provider configuration not found: $config_file" >&2
-        echo "Run 'cc-config provider list' to see available providers" >&2
+        echo "Run 'ccvm provider list' to see available providers" >&2
         return 1
     fi
     
@@ -165,7 +166,7 @@ _cc_load_config() {
     
     if ! echo "$json_content" | jq . >/dev/null 2>&1; then
         echo "Error: Invalid JSON in configuration file: $config_file" >&2
-        echo "Run 'cc-config provider edit $provider_alias' to fix the configuration" >&2
+        echo "Run 'ccvm provider edit $provider_alias' to fix the configuration" >&2
         return 1
     fi
     
@@ -177,13 +178,13 @@ _cc_load_config() {
     # Validate required fields
     if [ -z "$api_key" ] || [ "$api_key" = "null" ]; then
         echo "Error: Invalid or missing API key in $config_file" >&2
-        echo "Run 'cc-config provider edit $provider_alias' to set the API key" >&2
+        echo "Run 'ccvm provider edit $provider_alias' to set the API key" >&2
         return 1
     fi
     
     if [ -z "$base_url" ] || [ "$base_url" = "null" ]; then
         echo "Error: Invalid or missing base URL in $config_file" >&2
-        echo "Run 'cc-config provider edit $provider_alias' to set the base URL" >&2
+        echo "Run 'ccvm provider edit $provider_alias' to set the base URL" >&2
         return 1
     fi
     
@@ -203,8 +204,8 @@ _cc_load_config() {
     export API_TIMEOUT_MS="$timeout"
     
     # Update last used timestamp (optional, silent fail)
-    if command -v cc-config >/dev/null 2>&1; then
-        cc-config provider --update-last-used "$provider_alias" 2>/dev/null || true
+    if command -v ccvm >/dev/null 2>&1; then
+        ccvm provider --update-last-used "$provider_alias" 2>/dev/null || true
     fi
     
     return 0
@@ -247,7 +248,7 @@ _cc_claude_exec() {
     unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL API_TIMEOUT_MS
     
     # Load provider configuration
-    local config_file="\${CC_PROVIDERS_DIR:-~/.cc-config/providers}/$provider_alias.json"
+    local config_file="\${CC_PROVIDERS_DIR:-$HOME/.ccvm/providers}/$provider_alias.json"
     if ! _cc_load_config "$config_file" "$provider_alias"; then
         return 1
     fi
@@ -286,6 +287,32 @@ ${aliases}`;
   /**
    * Generate file footer
    */
+  /**
+   * Generate default claude alias based on configuration
+   */
+  async generateDefaultClaudeAlias() {
+    try {
+      // Read default provider from config
+      const configFile = path.join(this.configDir, 'config.json');
+      let defaultProvider = null;
+      
+      if (await fs.pathExists(configFile)) {
+        const config = await fs.readJson(configFile);
+        defaultProvider = config.defaultProvider;
+      }
+      
+      if (!defaultProvider) {
+        return '# No default provider set - use "ccvm provider use <alias>" to set one';
+      }
+      
+      return `# Default claude command (uses ${defaultProvider} provider)
+alias claude='_cc_claude_exec "${defaultProvider}"'`;
+      
+    } catch (error) {
+      return '# Error generating default claude alias';
+    }
+  }
+
   generateFooter(providers) {
     const providerList = providers.map(p => `#   ${p.alias}: ${p.baseURL}`).join('\n');
     const providerCount = providers.length;
@@ -299,10 +326,10 @@ ${providerList || '#   (none configured)'}
 ${providers.map(p => `#   ${p.alias} "your message"     # Use ${p.alias} provider`).join('\n')}
 #
 # Management commands:
-#   cc-config provider list     # List all providers
-#   cc-config provider show <alias>  # Show provider details
-#   cc-config provider add      # Add a new provider
-#   cc-config status           # Show system status
+#   ccvm provider list     # List all providers
+#   ccvm provider show <alias>  # Show provider details
+#   ccvm provider add      # Add a new provider
+#   ccvm status           # Show system status
 #
 # For more information: https://github.com/kedoupi/claude-code-kit
 
@@ -318,7 +345,7 @@ claude-providers() {
 
 # Function to reload aliases after configuration changes
 claude-reload() {
-    source "$HOME/.cc-config/aliases.sh"
+    source "$HOME/.ccvm/aliases.sh"
     echo "Claude Code Kit aliases reloaded"
 }`;
   }
@@ -426,7 +453,7 @@ claude-reload() {
    */
   async previewAliases() {
     const providers = await this.loadProviders();
-    return this.buildAliasContent(providers);
+    return await this.buildAliasContent(providers);
   }
 
   /**

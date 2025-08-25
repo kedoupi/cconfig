@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claude Code Kit is a comprehensive configuration management toolkit for Claude Code that provides multi-provider API support, secure credential management, and automated shell integration. The project enables users to configure and switch between different API providers (like different Claude API endpoints) seamlessly.
+CCVM (Claude Code Version Manager) is a comprehensive configuration management toolkit for Claude Code that provides multi-provider API support, secure credential management, and automated shell integration. The project enables users to configure and switch between different API providers (like different Claude API endpoints) seamlessly.
 
 ## Common Development Commands
 
@@ -50,8 +50,8 @@ npm run prepack
 npm install -g .
 
 # Test the CLI tool
-cc-config --help
-cc-config status
+ccvm --help
+ccvm status
 
 # Uninstall after testing
 npm uninstall -g @kedoupi/claude-code-kit
@@ -64,25 +64,25 @@ The system follows a modular architecture with four core managers:
 ### ConfigManager (`src/core/ConfigManager.js`)
 - **Purpose**: Overall system configuration and initialization
 - **Key Features**: File locking, directory structure management, system validation
-- **Location**: `~/.cc-config/config.json`
+- **Location**: `~/.ccvm/config.json`
 - **Responsibilities**: System-wide settings, feature flags, backup limits
 
 ### ProviderManager (`src/core/ProviderManager.js`)
 - **Purpose**: API provider configuration management
 - **Key Features**: Provider CRUD operations, validation, security checks
-- **Location**: `~/.cc-config/providers/*.json`
+- **Location**: `~/.ccvm/providers/*.json`
 - **Security**: Validates URLs, enforces HTTPS (except localhost/private networks), stores credentials with 600 permissions
 
 ### BackupManager (`src/core/BackupManager.js`)
 - **Purpose**: Configuration backup and restoration
 - **Key Features**: Automatic backups before changes, integrity verification, history management
-- **Location**: `~/.cc-config/backups/`
+- **Location**: `~/.ccvm/backups/`
 - **Retention**: Configurable max backups (default: 10)
 
 ### AliasGenerator (`src/core/AliasGenerator.js`)
 - **Purpose**: Shell alias generation for provider switching
 - **Key Features**: Dynamic alias creation, shell compatibility detection, security validation
-- **Output**: `~/.cc-config/aliases.sh`
+- **Output**: `~/.ccvm/aliases.sh`
 - **Design**: Simplified to avoid command proliferation - only core aliases, no `-info` variants
 
 ## Key Design Decisions
@@ -90,7 +90,7 @@ The system follows a modular architecture with four core managers:
 ### Provider Management Simplification
 The system was recently refactored to eliminate redundant `-info` commands:
 - **Before**: Each provider generated 2 aliases (`cc`, `cc-info`)
-- **After**: Each provider generates 1 alias (`cc`) + unified management (`cc-config provider show <alias>`)
+- **After**: Each provider generates 1 alias (`cc`) + unified management (`ccvm provider show <alias>`)
 - **Benefit**: 50% reduction in shell command pollution, unified management interface
 
 ### Security Model
@@ -107,7 +107,7 @@ The system was recently refactored to eliminate redundant `-info` commands:
 ## File Structure and Data Flow
 
 ```
-~/.cc-config/                 # User configuration directory
+~/.ccvm/                 # User configuration directory
 ├── config.json              # System configuration
 ├── aliases.sh               # Generated shell aliases
 ├── history.json            # Operation history
@@ -153,10 +153,10 @@ The system dynamically loads provider configurations and sets these environment 
 
 ## CLI Command Structure
 
-The main CLI (`bin/cc-config.js`) uses Commander.js with the following command hierarchy:
+The main CLI (`bin/ccvm.js`) uses Commander.js with the following command hierarchy:
 
 ```
-cc-config
+ccvm
 ├── provider                 # Provider management
 │   ├── add                 # Add new provider (interactive)
 │   ├── list                # List all providers

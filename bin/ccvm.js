@@ -13,6 +13,7 @@ const inquirer = require('inquirer');
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const Table = require('cli-table3');
 
 // Import package.json for version
 const packageJson = require('../package.json');
@@ -22,10 +23,9 @@ const ConfigManager = require('../src/core/ConfigManager');
 const ProviderManager = require('../src/core/ProviderManager');
 const BackupManager = require('../src/core/BackupManager');
 const AliasGenerator = require('../src/core/AliasGenerator');
-const UpdateManager = require('../src/core/UpdateManager');
 
 // Configuration
-const CONFIG_DIR = path.join(os.homedir(), '.cc-config');
+const CONFIG_DIR = path.join(os.homedir(), '.ccvm');
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 
 // Initialize managers
@@ -33,14 +33,13 @@ const configManager = new ConfigManager(CONFIG_DIR);
 const providerManager = new ProviderManager(CONFIG_DIR);
 const backupManager = new BackupManager(CONFIG_DIR, CLAUDE_DIR);
 const aliasGenerator = new AliasGenerator(CONFIG_DIR);
-const updateManager = new UpdateManager(CONFIG_DIR, CLAUDE_DIR);
 
 // Main CLI program
 const program = new Command();
 
 program
-  .name('cc-config')
-  .description('Claude Code Kit Configuration Manager')
+  .name('ccvm')
+  .description('Claude Code Version Manager')
   .version(packageJson.version);
 
 
@@ -63,12 +62,15 @@ providerCmd
       const answers = await inquirer.prompt([
         {
           type: 'input',
-          name: 'alias',
-          message: 'Provider alias (command name):',
+          name: 'aliasInput',
+          message: 'Provider name (will be prefixed with cc-):',
           validate: (input) => {
-            if (!input) {return 'Alias is required';}
+            if (!input) {return 'Provider name is required';}
             if (!/^[a-zA-Z0-9-_]+$/.test(input)) {
-              return 'Alias can only contain letters, numbers, hyphens, and underscores';
+              return 'Provider name can only contain letters, numbers, hyphens, and underscores';
+            }
+            if (input.startsWith('cc-')) {
+              return 'Do not include cc- prefix, it will be added automatically';
             }
             return true;
           }
@@ -112,17 +114,33 @@ providerCmd
         }
       ]);
 
+      // 添加 cc- 前缀
+      const providerData = {
+        ...answers,
+        alias: `cc-${answers.aliasInput}`
+      };
+      delete providerData.aliasInput;
+
       const addSpinner = ora('Adding provider...').start();
       
-      await providerManager.addProvider(answers);
+      await providerManager.addProvider(providerData);
       await aliasGenerator.generateAliases();
       
-      addSpinner.succeed(chalk.green(`Provider '${answers.alias}' added successfully!`));
+      addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully!`));
       
-      console.log(chalk.yellow('\n💡 Next steps:'));
-      console.log(`   1. Restart your terminal or run: source ~/.zshrc`);
-      console.log(`   2. Test the provider: ${answers.alias} "Hello"`);
-      console.log(`   3. List all providers: cc-config provider list`);
+      console.log(chalk.green('\n✅ Provider ready to use!'));
+      console.log(chalk.yellow('\n🔄 For immediate use in current session:'));
+      console.log(chalk.cyan('source ~/.ccvm/aliases.sh'));
+      
+      console.log(chalk.yellow('\n💡 For persistent setup, add to ~/.zshrc:'));
+      console.log(chalk.dim('source ~/.ccvm/aliases.sh'));
+      
+      console.log(chalk.yellow('\n🚀 Usage examples:'));
+      console.log(`   ${providerData.alias} "Hello, how are you?"`);
+      console.log(`   ${providerData.alias} "Explain React hooks"`);
+      
+      console.log(chalk.blue('\n📝 Set as default provider:'));
+      console.log(`   ccvm provider use ${providerData.alias}`);
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error adding provider:'), error.message);
@@ -142,7 +160,7 @@ providerCmd
       
       if (!provider) {
         spinner.fail(chalk.red(`Provider '${alias}' not found`));
-        console.log(chalk.blue('\nRun: cc-config provider list'));
+        console.log(chalk.blue('\nRun: ccvm provider list'));
         return;
       }
 
@@ -159,7 +177,7 @@ providerCmd
       
       console.log(chalk.cyan('\nUsage:'));
       console.log(`  ${provider.alias} "your message"     # Use this provider`);
-      console.log(`  cc-config provider edit ${provider.alias}    # Edit this provider`);
+      console.log(`  ccvm provider edit ${provider.alias}    # Edit this provider`);
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error showing provider:'), error.message);
@@ -181,25 +199,36 @@ providerCmd
 
       if (providers.length === 0) {
         console.log(chalk.yellow('\n📝 No providers configured yet.'));
-        console.log(chalk.blue('   Run: cc-config provider add'));
+        console.log(chalk.blue('   Run: ccvm provider add'));
         return;
       }
 
       console.log(chalk.blue('\n📡 Configured API Providers\n'));
       
-      console.log(chalk.gray('Alias').padEnd(15) + 
-                  chalk.gray('Base URL').padEnd(35) + 
-                  chalk.gray('Status'));
-      console.log('─'.repeat(60));
+      // 创建表格
+      const table = new Table({
+        head: [
+          chalk.bold('Alias'),
+          chalk.bold('Base URL'), 
+          chalk.bold('Status')
+        ],
+        colWidths: [15, 40, 12],
+        style: {
+          border: ['gray'],
+          head: []
+        }
+      });
 
-      for (const provider of providers) {
-        const status = chalk.green('✓ Active');
-        console.log(
-          chalk.cyan(provider.alias).padEnd(15) +
-          provider.baseURL.padEnd(35) +
-          status
-        );
-      }
+      // 添加数据行
+      providers.forEach(provider => {
+        table.push([
+          chalk.cyan(provider.alias),
+          provider.baseURL,
+          chalk.green('✓ Active')
+        ]);
+      });
+
+      console.log(table.toString());
 
       console.log(chalk.yellow(`\n💡 Total: ${providers.length} provider(s) configured`));
 
@@ -263,8 +292,17 @@ providerCmd
 
       await providerManager.updateProvider(alias, updatedProvider);
       await aliasGenerator.generateAliases();
+      
+      // 自动加载更新的环境变量到当前进程
+      process.env.ANTHROPIC_BASE_URL = updatedProvider.baseURL;
+      process.env.ANTHROPIC_AUTH_TOKEN = updatedProvider.apiKey;
+      process.env.API_TIMEOUT_MS = updatedProvider.timeout?.toString() || '3000000';
 
       updateSpinner.succeed(chalk.green(`Provider '${alias}' updated successfully!`));
+      
+      console.log(chalk.green('\n✅ Updated configuration loaded:'));
+      console.log(chalk.dim(`   ANTHROPIC_BASE_URL=${updatedProvider.baseURL}`));
+      console.log(chalk.dim(`   ANTHROPIC_AUTH_TOKEN=${updatedProvider.apiKey?.substring(0, 20)}...`));
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error editing provider:'), error.message);
@@ -317,235 +355,59 @@ providerCmd
   });
 
 // Configuration management commands
-program
-  .command('update')
-  .description('Update configuration templates from GitHub')
-  .option('--force', 'Force update without confirmation')
-  .option('--check', 'Check for updates without installing')
-  .action(async (options) => {
-    try {
-      await configManager.init();
 
-      // Check for updates first
-      if (options.check) {
-        const spinner = ora('Checking for updates...').start();
-        const updateInfo = await updateManager.checkForUpdates();
-        spinner.stop();
 
-        console.log(chalk.blue('\n🔍 Update Check Results\n'));
-        console.log(`Local version:  ${chalk.cyan(updateInfo.localVersion)}`);
-        console.log(`Remote version: ${chalk.cyan(updateInfo.remoteVersion)}`);
-        
-        if (updateInfo.hasUpdate) {
-          console.log(chalk.green('\n✨ Updates available!'));
-          console.log('Run "cc-config update" to install the latest version.');
-        } else {
-          console.log(chalk.green('\n✅ You have the latest configuration!'));
-        }
-        return;
-      }
 
-      // Check for updates before proceeding
-      const spinner1 = ora('Checking for updates...').start();
-      const updateInfo = await updateManager.checkForUpdates();
-      spinner1.stop();
-
-      if (!updateInfo.hasUpdate) {
-        console.log(chalk.green('\n✅ You already have the latest configuration!'));
-        console.log(`Current version: ${chalk.cyan(updateInfo.localVersion)}`);
-        return;
-      }
-
-      console.log(chalk.blue('\n📦 Update Available\n'));
-      console.log(`Current version: ${chalk.cyan(updateInfo.localVersion)}`);
-      console.log(`Latest version:  ${chalk.green(updateInfo.remoteVersion)}`);
-      console.log();
-
-      // Confirm update
-      if (!options.force) {
-        const { confirm } = await inquirer.prompt([
-          {
-            type: 'confirm',
-            name: 'confirm',
-            message: 'Update configuration templates to the latest version?',
-            default: true
-          }
-        ]);
-
-        if (!confirm) {
-          console.log(chalk.yellow('Update cancelled.'));
-          return;
-        }
-      }
-
-      // Perform update
-      const updateSpinner = ora('Downloading and updating configuration...').start();
-      
-      // Create backup before update
-      const backupTimestamp = await backupManager.createBackup('Pre-update backup');
-      updateSpinner.text = 'Backup created, applying updates...';
-
-      // Perform the update
-      const result = await updateManager.performUpdate({
-        force: options.force,
-        backupName: 'Pre-update backup'
-      });
-
-      updateSpinner.succeed(chalk.green('Configuration updated successfully!'));
-
-      console.log(chalk.blue('\n🎉 Update Summary\n'));
-      console.log(`✅ Updated to version: ${chalk.green(result.version)}`);
-      console.log(`📦 Backup created: ${chalk.cyan(backupTimestamp)}`);
-      console.log();
-      
-      console.log(chalk.blue('📝 What was updated:'));
-      console.log('  • Agent definitions (architect, developer, etc.)');
-      console.log('  • Command templates (ask, specs, docs, etc.)');
-      console.log('  • Output styles and configurations');
-      console.log('  • System settings and metadata');
-      console.log();
-
-      console.log(chalk.green('🚀 Your Claude Code configuration is now up to date!'));
-      console.log('💡 Restart your terminal or reload your shell configuration to use the latest features.');
-
-    } catch (error) {
-      console.error(chalk.red('\n❌ Error updating configuration:'), error.message);
-      console.log(chalk.yellow('\n🔄 If the update failed, you can restore from backup with:'));
-      console.log('   cc-config history');
-      process.exit(1);
-    }
-  });
-
-program
-  .command('history')
-  .description('View and restore configuration backups')
-  .action(async () => {
-    try {
-      const spinner = ora('Loading backup history...').start();
-      
-      await configManager.init();
-      const backups = await backupManager.listBackups();
-      
-      spinner.stop();
-
-      if (backups.length === 0) {
-        console.log(chalk.yellow('\n📦 No backups found.'));
-        return;
-      }
-
-      console.log(chalk.blue('\n📦 Configuration Backup History\n'));
-
-      const choices = backups.map((backup) => ({
-        name: `${backup.timestamp} - ${backup.description} (${backup.size || 'Unknown size'})`,
-        value: backup.timestamp,
-        short: backup.timestamp
-      }));
-
-      choices.push({ name: chalk.gray('Cancel'), value: null });
-
-      const { selectedBackup } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'selectedBackup',
-          message: 'Select a backup to restore:',
-          choices
-        }
-      ]);
-
-      if (!selectedBackup) {
-        console.log(chalk.yellow('Operation cancelled.'));
-        return;
-      }
-
-      const { confirm } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'confirm',
-          message: `Restore backup from ${selectedBackup}? This will overwrite current configuration.`,
-          default: false
-        }
-      ]);
-
-      if (!confirm) {
-        console.log(chalk.yellow('Restore cancelled.'));
-        return;
-      }
-
-      const restoreSpinner = ora('Restoring backup...').start();
-
-      await backupManager.restoreBackup(selectedBackup);
-      await aliasGenerator.generateAliases();
-
-      restoreSpinner.succeed(chalk.green('Backup restored successfully!'));
-
-    } catch (error) {
-      console.error(chalk.red('\n❌ Error managing backups:'), error.message);
-      process.exit(1);
-    }
-  });
 
 
 
 providerCmd
   .command('use [alias]')
-  .description('Set default provider (like nvm use)')
+  .description('Set default provider')
   .action(async (alias) => {
     try {
-      const spinner = ora('Setting default provider...').start();
-      
       await configManager.init();
-      const providers = await providerManager.listProviders();
       
-      if (providers.length === 0) {
-        spinner.fail('No providers configured. Add a provider first.');
-        return;
-      }
-      
-      // If only one provider, use it automatically
-      if (providers.length === 1) {
-        const defaultProvider = providers[0];
-        spinner.succeed(`Using ${defaultProvider.alias} (only provider available)`);
-        console.log(chalk.green(`✓ Default provider: ${defaultProvider.alias} (${defaultProvider.baseURL})`));
-        return;
-      }
-      
-      // If alias provided, use it
-      if (alias) {
-        const provider = await providerManager.getProvider(alias);
-        if (!provider) {
-          spinner.fail(`Provider '${alias}' not found`);
-          return;
+      if (!alias) {
+        // 显示当前默认provider
+        const config = await configManager.getConfig();
+        const defaultProvider = config.defaultProvider;
+        
+        if (defaultProvider) {
+          const provider = await providerManager.getProvider(defaultProvider);
+          if (provider) {
+            console.log(chalk.blue('📡 Current default provider:'));
+            console.log(`   ${provider.alias} (${provider.baseURL})`);
+            return;
+          }
         }
-        spinner.succeed(`Now using ${alias}`);
-        console.log(chalk.green(`✓ Default provider: ${alias} (${provider.baseURL})`));
+        
+        console.log(chalk.yellow('No default provider set'));
+        console.log('Usage: ccvm provider use <alias>');
         return;
       }
       
-      // Interactive selection when multiple providers exist
-      spinner.stop();
+      const spinner = ora(`Setting default provider to '${alias}'...`).start();
       
-      console.log(chalk.blue('\n📡 Available Providers:\n'));
-      providers.forEach((p, index) => {
-        console.log(`  ${index + 1}. ${chalk.cyan(p.alias)} (${p.baseURL})`);
-      });
+      const provider = await providerManager.getProvider(alias);
+      if (!provider) {
+        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        return;
+      }
       
-      const readline = require('readline');
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
+      // 保存默认provider到配置
+      const currentConfig = await configManager.getConfig();
+      await fs.writeJson(path.join(configManager.getConfigDir(), 'config.json'), {
+        ...currentConfig,
+        defaultProvider: alias,
+        lastUpdated: new Date().toISOString()
+      }, { spaces: 2 });
       
-      rl.question('\nSelect provider (1-' + providers.length + '): ', (answer) => {
-        const index = parseInt(answer) - 1;
-        if (index >= 0 && index < providers.length) {
-          const selectedProvider = providers[index];
-          console.log(chalk.green(`✓ Now using: ${selectedProvider.alias} (${selectedProvider.baseURL})`));
-        } else {
-          console.log(chalk.red('Invalid selection'));
-        }
-        rl.close();
-      });
+      spinner.succeed(chalk.green(`Default provider set to '${alias}'`));
       
+      console.log(chalk.yellow('\n💡 Usage:'));
+      console.log(`   ${alias} "Hello, how are you?"`);
+
     } catch (error) {
       console.error(chalk.red('\n❌ Error setting default provider:'), error.message);
       process.exit(1);
@@ -573,13 +435,31 @@ program
       
       spinner.stop();
 
-      console.log(chalk.blue('\n📊 Claude Code Kit Status\n'));
+      console.log(chalk.blue('\n📊 CCVM (Claude Code Version Manager) Status\n'));
+
+      // Installation mode detection
+      const devPathFile = path.join(CONFIG_DIR, 'dev_path');
+      const isDevelopmentMode = await fs.pathExists(devPathFile);
+      let installMode = 'Production';
+      let installPath = CONFIG_DIR;
+      
+      if (isDevelopmentMode) {
+        try {
+          const devPath = await fs.readFile(devPathFile, 'utf8');
+          installMode = 'Development';
+          installPath = devPath.trim();
+        } catch (error) {
+          // Fall back to production mode if dev_path file is corrupted
+        }
+      }
 
       // System info
       console.log(chalk.cyan('System Information:'));
       console.log(`  Version: ${systemInfo.version}`);
       console.log(`  Node.js: ${systemInfo.nodeVersion}`);
       console.log(`  Platform: ${systemInfo.platform}`);
+      console.log(`  Install Mode: ${installMode}${installMode === 'Development' ? ' 🔧' : ' 📦'}`);
+      console.log(`  Install Path: ${installPath}`);
       console.log(`  Initialized: ${systemInfo.initialized ? '✓' : '✗'}`);
       console.log(`  Config Directory: ${systemInfo.configDir}`);
       console.log(`  Claude Directory: ${systemInfo.claudeDir}`);
@@ -594,7 +474,7 @@ program
 
       // Directory status
       console.log(chalk.cyan('\nDirectory Status:'));
-      console.log(`  ~/.cc-config: ${await fs.pathExists(CONFIG_DIR) ? '✓' : '✗'}`);
+      console.log(`  ~/.ccvm: ${await fs.pathExists(CONFIG_DIR) ? '✓' : '✗'}`);
       console.log(`  ~/.claude: ${await fs.pathExists(CLAUDE_DIR) ? '✓' : '✗'}`);
       console.log(`  aliases.sh: ${await fs.pathExists(path.join(CONFIG_DIR, 'aliases.sh')) ? '✓' : '✗'}`);
 
@@ -776,9 +656,9 @@ program
 
       // Recommendations
       console.log(chalk.cyan('\nRecommendations:'));
-      console.log('  • Run "cc-config doctor --fix" to automatically fix issues');
-      console.log('  • Run "cc-config status --detailed" for detailed information');
-      console.log('  • Run "cc-config update" to update configuration templates');
+      console.log('  • Run "ccvm doctor --fix" to automatically fix issues');
+      console.log('  • Run "ccvm status --detailed" for detailed information');
+      console.log('  • Run "ccvm update" to update configuration templates');
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error during diagnostics:'), error.message);
@@ -791,7 +671,7 @@ program
   .command('*', { hidden: true })
   .action((cmd) => {
     console.log(chalk.red(`\n❌ Unknown command: ${cmd}`));
-    console.log(chalk.blue('Run "cc-config --help" for available commands.'));
+    console.log(chalk.blue('Run "ccvm --help" for available commands.'));
     process.exit(1);
   });
 

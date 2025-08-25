@@ -1,13 +1,10 @@
 {
-  "name": "@kedoupi/claude-code-kit",
-  "version": "1.0.9",
-  "description": "Claude Code configuration toolkit for managing configurations and providers",
+  "name": "@kedoupi/ccvm",
+  "version": "1.0.0",
+  "description": "Claude Code Version Manager - manage Claude API providers like nvm",
   "main": "src/index.js",
-  "bin": {
-    "cc-config": "bin/cc-config.js"
-  },
   "scripts": {
-    "start": "node bin/cc-config.js",
+    "start": "node bin/ccvm.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -21,18 +18,21 @@
   "keywords": [
     "claude",
     "claude-code",
-    "configuration",
+    "ccvm",
+    "version-manager",
+    "provider-manager",
     "cli",
     "anthropic",
     "ai"
   ],
-  "author": "Claude Code Kit Contributors",
+  "author": "CCVM Contributors",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
     "chalk": "^4.1.2",
+    "cli-table3": "^0.6.5",
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0",
     "inquirer": "^8.2.7",
