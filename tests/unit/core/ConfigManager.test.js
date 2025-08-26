@@ -31,7 +31,7 @@ describe('ConfigManager', () => {
 
     it('should use default paths when no configDir provided', () => {
       const defaultManager = new ConfigManager();
-      expect(defaultManager.getConfigDir()).toContain('.cc-config');
+      expect(defaultManager.getConfigDir()).toContain('.ccvm');
     });
   });
 
@@ -57,19 +57,11 @@ describe('ConfigManager', () => {
     it('should create required files', async () => {
       await configManager.init();
 
-      const historyFile = configManager.getHistoryFile();
       const aliasesFile = configManager.getAliasesFile();
       const claudeSettingsFile = path.join(configManager.getClaudeDir(), 'settings.json');
 
-      expect(await fs.pathExists(historyFile)).toBe(true);
       expect(await fs.pathExists(aliasesFile)).toBe(true);
       expect(await fs.pathExists(claudeSettingsFile)).toBe(true);
-
-      // Verify file contents
-      const history = await fs.readJson(historyFile);
-      expect(history.version).toBe('1.0');
-      expect(history.backups).toEqual([]);
-      expect(history.created).toBeDefined();
 
       const aliases = await fs.readFile(aliasesFile, 'utf8');
       expect(aliases).toContain('# Claude Code Kit aliases');
@@ -80,16 +72,16 @@ describe('ConfigManager', () => {
     });
 
     it('should not overwrite existing files', async () => {
-      const historyFile = configManager.getHistoryFile();
-      const customHistory = { version: '1.0', backups: [{ test: 'data' }] };
+      const configFile = configManager.getConfigFile();
+      const customConfig = { version: '1.0.0', defaultProvider: 'test-provider' };
       
-      await fs.ensureDir(path.dirname(historyFile));
-      await fs.writeJson(historyFile, customHistory);
+      await fs.ensureDir(path.dirname(configFile));
+      await fs.writeJson(configFile, customConfig);
 
       await configManager.init();
 
-      const history = await fs.readJson(historyFile);
-      expect(history).toEqual(customHistory);
+      const config = await fs.readJson(configFile);
+      expect(config.defaultProvider).toBe('test-provider');
     });
   });
 
@@ -172,16 +164,16 @@ describe('ConfigManager', () => {
       expect(validation.issues.some(issue => issue.includes('file missing'))).toBe(true);
     });
 
-    it('should detect corrupted JSON files', async () => {
+    it('should detect missing directories', async () => {
       await configManager.init();
       
-      // Corrupt the history file
-      await fs.writeFile(configManager.getHistoryFile(), 'invalid json content');
+      // Remove providers directory
+      await fs.remove(configManager.getProvidersDir());
       
       const validation = await configManager.validateConfiguration();
       
       expect(validation.valid).toBe(false);
-      expect(validation.issues.some(issue => issue.includes('corrupted'))).toBe(true);
+      expect(validation.issues.some(issue => issue.includes('directory missing'))).toBe(true);
     });
   });
 
@@ -224,7 +216,6 @@ describe('ConfigManager', () => {
       expect(configManager.getProvidersDir()).toBe(path.join(testConfigDir, 'providers'));
       expect(configManager.getBackupsDir()).toBe(path.join(testConfigDir, 'backups'));
       expect(configManager.getAliasesFile()).toBe(path.join(testConfigDir, 'aliases.sh'));
-      expect(configManager.getHistoryFile()).toBe(path.join(testConfigDir, 'history.json'));
     });
   });
 
@@ -239,15 +230,15 @@ describe('ConfigManager', () => {
       fs.ensureDir = originalEnsureDir;
     });
 
-    it('should handle corrupted files during validation', async () => {
+    it('should handle missing files during validation', async () => {
       await configManager.init();
       
-      // Create a file with invalid JSON
-      await fs.writeFile(configManager.getHistoryFile(), '{invalid json}');
+      // Remove aliases file
+      await fs.remove(configManager.getAliasesFile());
       
       const validation = await configManager.validateConfiguration();
       expect(validation.valid).toBe(false);
-      expect(validation.issues.some(issue => issue.includes('corrupted'))).toBe(true);
+      expect(validation.issues.some(issue => issue.includes('missing'))).toBe(true);
     });
   });
 

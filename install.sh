@@ -135,14 +135,54 @@ install_ccvm() {
     
     info "检测到安装模式: $mode"
     
-    # 清理现有安装
+    # 智能处理现有安装
     if [ -d "$CCVM_DIR" ]; then
-        warn "发现现有安装，正在清理..."
+        warn "发现现有 CCVM 配置，正在保留用户数据..."
+        
+        # 备份用户配置数据
+        local backup_temp="${CCVM_DIR}_backup_$(date +%s)"
+        local user_data_dirs=("providers" "backups")
+        local user_data_files=("config.json")
+        
+        # 创建临时备份目录
+        mkdir -p "$backup_temp"
+        
+        # 备份用户数据目录
+        for dir in "${user_data_dirs[@]}"; do
+            if [ -d "$CCVM_DIR/$dir" ]; then
+                cp -r "$CCVM_DIR/$dir" "$backup_temp/"
+                info "已备份用户数据: $dir"
+            fi
+        done
+        
+        # 备份用户配置文件
+        for file in "${user_data_files[@]}"; do
+            if [ -f "$CCVM_DIR/$file" ]; then
+                cp "$CCVM_DIR/$file" "$backup_temp/"
+                info "已备份配置文件: $file"
+            fi
+        done
+        
+        # 清理旧安装，但保留备份
         rm -rf "$CCVM_DIR"
+        
+        # 创建新的基础目录
+        mkdir -p "$CCVM_DIR"
+        
+        # 恢复用户数据
+        if [ -d "$backup_temp" ]; then
+            cp -r "$backup_temp"/* "$CCVM_DIR/" 2>/dev/null || true
+            rm -rf "$backup_temp"
+            success "用户配置已恢复"
+        fi
+    else
+        # 全新安装
+        info "全新安装 CCVM..."
     fi
     
-    # 创建基础目录
+    # 确保基础目录结构存在
     mkdir -p "$CCVM_DIR/providers"
+    mkdir -p "$CCVM_DIR/backups"
     
     if [ "$mode" = "dev" ]; then
         # 开发模式：记录开发路径，不复制代码
@@ -286,6 +326,73 @@ install_claude_cli() {
     fi
 }
 
+# 引导配置第一个 Provider
+setup_first_provider() {
+    # 检查是否已有 provider 配置
+    if [ -d "$CCVM_DIR/providers" ] && [ "$(ls -A "$CCVM_DIR/providers" 2>/dev/null | grep -c '\.json$')" -gt 0 ]; then
+        info "检测到现有 provider 配置，跳过初始配置向导"
+        return 0
+    fi
+    
+    echo
+    echo -e "${BLUE}🎯 首次使用配置向导${NC}"
+    echo "=================================================="
+    
+    info "为了让您快速开始使用，我们来配置第一个 Claude API provider"
+    echo
+    
+    # 询问是否要配置
+    echo -e "${YELLOW}是否现在配置第一个 provider？ (推荐) [Y/n]:${NC}"
+    read -r setup_provider
+    
+    if [[ "$setup_provider" =~ ^[Nn]$ ]]; then
+        info "跳过初始配置，您稍后可运行 'ccvm provider add' 来添加"
+        return 0
+    fi
+    
+    # 确定 CCVM 可执行文件路径
+    local ccvm_bin_path
+    if [ -f "$CCVM_DIR/dev_path" ]; then
+        ccvm_bin_path="$(cat "$CCVM_DIR/dev_path")/bin/ccvm.js"
+    else
+        ccvm_bin_path="$CCVM_DIR/bin/ccvm.js"
+    fi
+    
+    # 运行交互式 provider 添加
+    info "启动 provider 配置向导..."
+    echo
+    
+    # 直接调用 ccvm provider add
+    if node "$ccvm_bin_path" provider add; then
+        success "首个 provider 配置完成！"
+        
+        # 检查是否成功添加了 provider
+        local provider_count=$(ls -1 "$CCVM_DIR/providers"/*.json 2>/dev/null | wc -l)
+        if [ "$provider_count" -gt 0 ]; then
+            # 获取第一个 provider 的别名
+            local first_provider=$(ls -1 "$CCVM_DIR/providers"/*.json 2>/dev/null | head -1 | xargs basename | sed 's/\.json$//')
+            
+            # 设置为默认 provider
+            if node "$ccvm_bin_path" provider use "$first_provider" >/dev/null 2>&1; then
+                success "已将 '$first_provider' 设置为默认 provider"
+                
+                # 生成 aliases
+                node "$ccvm_bin_path" provider list >/dev/null 2>&1 || true
+                
+                echo
+                echo -e "${GREEN}🎊 恭喜！现在您可以使用以下命令:${NC}"
+                echo "  $first_provider \"Hello Claude!\""
+                echo "  ccvm status"
+                echo
+            else
+                warn "provider 添加成功，但设置默认 provider 时出现问题"
+            fi
+        fi
+    else
+        warn "provider 配置被取消或失败，您可以稍后运行 'ccvm provider add'"
+    fi
+}
+
 # 显示安装完成信息
 show_completion_info() {
     local mode=$(detect_mode)
@@ -312,10 +419,21 @@ show_completion_info() {
     echo "  source $(detect_shell | sed "s|${HOME}|~|g")"
     echo
     echo -e "${BLUE}🚀 接下来的步骤:${NC}"
-    echo "  1️⃣  ccvm --help               # 查看帮助"
-    echo "  2️⃣  ccvm provider add        # 添加第一个 provider"
-    echo "  3️⃣  cc-xxx \"Hello!\"           # 使用您的 provider"
-    echo "  4️⃣  ccvm provider list       # 查看所有 providers"
+    
+    # 检查是否已配置 provider
+    if [ -d "$CCVM_DIR/providers" ] && [ "$(ls -A "$CCVM_DIR/providers" 2>/dev/null | grep -c '\.json$')" -gt 0 ]; then
+        # 已配置 provider 的情况
+        echo "  1️⃣  ccvm status               # 查看当前配置状态"  
+        echo "  2️⃣  ccvm provider list       # 查看所有 providers"
+        echo "  3️⃣  重启终端后使用您的 provider 命令"
+        echo "  4️⃣  ccvm --help              # 查看完整帮助"
+    else
+        # 未配置 provider 的情况
+        echo "  1️⃣  ccvm --help               # 查看帮助"
+        echo "  2️⃣  ccvm provider add        # 添加第一个 provider"
+        echo "  3️⃣  cc-xxx \"Hello!\"           # 使用您的 provider"
+        echo "  4️⃣  ccvm provider list       # 查看所有 providers"
+    fi
     echo
     
     if [ "$mode" = "dev" ]; then
@@ -358,23 +476,26 @@ main() {
     echo
     
     # 安装步骤
-    echo -e "${BLUE}步骤 1/6:${NC} 检查系统依赖"
+    echo -e "${BLUE}步骤 1/7:${NC} 检查系统依赖"
     check_dependencies
     
-    echo -e "${BLUE}步骤 2/6:${NC} 备份现有配置"
+    echo -e "${BLUE}步骤 2/7:${NC} 备份现有配置"
     backup_claude_config
     
-    echo -e "${BLUE}步骤 3/6:${NC} 安装 CCVM 核心"
+    echo -e "${BLUE}步骤 3/7:${NC} 安装 CCVM 核心"
     install_ccvm
     
-    echo -e "${BLUE}步骤 4/6:${NC} 同步 Claude 配置"
+    echo -e "${BLUE}步骤 4/7:${NC} 同步 Claude 配置"
     sync_claude_config
     
-    echo -e "${BLUE}步骤 5/6:${NC} 创建 Shell 函数"
+    echo -e "${BLUE}步骤 5/7:${NC} 创建 Shell 函数"
     create_shell_function
     
-    echo -e "${BLUE}步骤 6/6:${NC} 安装 Claude Code CLI"
+    echo -e "${BLUE}步骤 6/7:${NC} 安装 Claude Code CLI"
     install_claude_cli
+    
+    echo -e "${BLUE}步骤 7/7:${NC} 配置首个 Provider"
+    setup_first_provider
     
     show_completion_info
 }

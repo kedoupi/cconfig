@@ -8,6 +8,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const { warn, debug } = require('../utils/logger');
 
 class ConfigManager {
   constructor(configDir = path.join(os.homedir(), '.ccvm')) {
@@ -16,25 +17,16 @@ class ConfigManager {
     this.providersDir = path.join(configDir, 'providers');
     this.backupsDir = path.join(configDir, 'backups');
     this.aliasesFile = path.join(configDir, 'aliases.sh');
-    this.historyFile = path.join(configDir, 'history.json');
     this.lockFile = path.join(configDir, '.lock');
     this.configFile = path.join(configDir, 'config.json');
     
-    // Default configuration
+    // Default configuration (simplified - only actual used fields)
     this.defaultConfig = {
       version: '1.0.0',
       initialized: false,
       created: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
-      features: {
-        autoBackup: true,
-        validateConfigs: true,
-        aliasGeneration: true
-      },
-      limits: {
-        maxBackups: 10,
-        maxProviders: 20
-      }
+      defaultProvider: null
     };
   }
 
@@ -58,7 +50,7 @@ class ConfigManager {
       // Validate configuration integrity
       const validation = await this.validateConfiguration();
       if (!validation.valid) {
-        console.warn('Configuration validation issues found:', validation.issues);
+        await warn('Configuration validation issues found', { issues: validation.issues });
         await this._attemptAutoRepair(validation.issues);
       }
       
@@ -89,7 +81,7 @@ class ConfigManager {
         
         // If lock is older than 5 minutes, consider it stale
         if (lockAge > 5 * 60 * 1000) {
-          console.warn('Removing stale lock file');
+          await warn('Removing stale lock file', { lockFile: this.lockFile });
           await fs.remove(this.lockFile);
         } else {
           throw new Error(`Configuration is locked by process ${lock.pid} since ${lock.created}`);
@@ -157,15 +149,6 @@ class ConfigManager {
   async ensureFiles() {
     const files = [
       {
-        path: this.historyFile,
-        content: {
-          version: '1.0',
-          created: new Date().toISOString(),
-          backups: []
-        },
-        description: 'Backup history file'
-      },
-      {
         path: this.configFile,
         content: this.defaultConfig,
         description: 'Main configuration file'
@@ -186,7 +169,7 @@ class ConfigManager {
               await fs.writeJson(filePath, { ...content, ...existing }, { spaces: 2 });
             }
           } catch (parseError) {
-            console.warn(`Corrupted ${description}, recreating...`);
+            await warn('Recreating corrupted file', { file: filePath, description });
             await fs.writeJson(filePath, content, { spaces: 2 });
           }
         }
@@ -315,11 +298,12 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
   }
 
   /**
-   * Get history file path
+   * Get config file path
    */
-  getHistoryFile() {
-    return this.historyFile;
+  getConfigFile() {
+    return this.configFile;
   }
+
 
   /**
    * Check if the configuration system is properly initialized
@@ -329,8 +313,7 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
       this.configDir,
       this.providersDir,
       this.backupsDir,
-      this.claudeDir,
-      this.historyFile
+      this.claudeDir
     ];
 
     for (const path of requiredPaths) {
@@ -378,7 +361,6 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
 
     // Check if required files exist
     const requiredFiles = [
-      { path: this.historyFile, name: 'History file' },
       { path: this.aliasesFile, name: 'Aliases file' }
     ];
 
@@ -386,13 +368,6 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
       if (!await fs.pathExists(filePath)) {
         issues.push(`${name} missing: ${filePath}`);
       }
-    }
-
-    // Validate JSON files
-    try {
-      await fs.readJson(this.historyFile);
-    } catch (error) {
-      issues.push(`History file is corrupted: ${error.message}`);
     }
 
     return {
@@ -432,17 +407,9 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
           } else if (issue.includes('file')) {
             await this.ensureFiles();
           }
-        } else if (issue.includes('corrupted')) {
-          if (issue.includes('History file')) {
-            await fs.writeJson(this.historyFile, {
-              version: '1.0',
-              created: new Date().toISOString(),
-              backups: []
-            }, { spaces: 2 });
-          }
         }
       } catch (repairError) {
-        console.warn(`Failed to auto-repair issue "${issue}": ${repairError.message}`);
+        await warn('Failed to auto-repair issue', { issue, error: repairError.message });
       }
     }
   }

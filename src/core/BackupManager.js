@@ -14,7 +14,6 @@ class BackupManager {
     this.configDir = configDir;
     this.claudeDir = claudeDir;
     this.backupsDir = path.join(configDir, 'backups');
-    this.historyFile = path.join(configDir, 'history.json');
     this.lockFile = path.join(configDir, '.backup-lock');
     
     // Configuration
@@ -121,9 +120,6 @@ class BackupManager {
 
       // Create integrity verification file
       await this._createIntegrityFile(backupDir, metadata);
-
-      // Update history
-      await this.recordBackup(metadata);
 
       await this._releaseLock();
       return timestamp;
@@ -243,9 +239,6 @@ class BackupManager {
     }
 
     await fs.remove(backupDir);
-    
-    // Update history
-    await this.removeBackupFromHistory(timestamp);
   }
 
   /**
@@ -320,40 +313,6 @@ class BackupManager {
       .slice(0, -5); // Remove milliseconds and Z
   }
 
-  /**
-   * Record backup in history
-   */
-  async recordBackup(metadata) {
-    let history;
-    
-    try {
-      history = await fs.readJson(this.historyFile);
-    } catch {
-      history = { version: '1.0', backups: [] };
-    }
-
-    history.backups.unshift(metadata);
-    
-    // Keep only last 50 entries in history
-    if (history.backups.length > 50) {
-      history.backups = history.backups.slice(0, 50);
-    }
-
-    await fs.writeJson(this.historyFile, history, { spaces: 2 });
-  }
-
-  /**
-   * Remove backup from history
-   */
-  async removeBackupFromHistory(timestamp) {
-    try {
-      const history = await fs.readJson(this.historyFile);
-      history.backups = history.backups.filter(backup => backup.timestamp !== timestamp);
-      await fs.writeJson(this.historyFile, history, { spaces: 2 });
-    } catch (error) {
-      console.warn(`Failed to update history: ${error.message}`);
-    }
-  }
 
   /**
    * Calculate directory size

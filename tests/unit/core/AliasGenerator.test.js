@@ -125,9 +125,9 @@ describe('AliasGenerator', () => {
   });
 
   describe('buildAliasContent', () => {
-    it('should build complete alias content', () => {
+    it('should build complete alias content', async () => {
       const testProviders = testUtils.createTestProviders(2);
-      const content = aliasGenerator.buildAliasContent(testProviders);
+      const content = await aliasGenerator.buildAliasContent(testProviders);
       
       expect(content).toContain('# Claude Code Kit - Auto-generated aliases');
       expect(content).toContain('_cc_load_config()');
@@ -140,9 +140,9 @@ describe('AliasGenerator', () => {
       });
     });
 
-    it('should include provider statistics in footer', () => {
+    it('should include provider statistics in footer', async () => {
       const testProviders = testUtils.createTestProviders(3);
-      const content = aliasGenerator.buildAliasContent(testProviders);
+      const content = await aliasGenerator.buildAliasContent(testProviders);
       
       expect(content).toContain('Total providers configured: 3');
       testProviders.forEach(provider => {
@@ -150,9 +150,9 @@ describe('AliasGenerator', () => {
       });
     });
 
-    it('should include usage examples', () => {
+    it('should include usage examples', async () => {
       const testProviders = testUtils.createTestProviders(1);
-      const content = aliasGenerator.buildAliasContent(testProviders);
+      const content = await aliasGenerator.buildAliasContent(testProviders);
       
       expect(content).toContain('Usage:');
       expect(content).toContain('Example:');

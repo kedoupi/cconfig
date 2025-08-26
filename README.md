@@ -1,16 +1,16 @@
-# Claude Code Kit
+# CCVM - Claude Code Version Manager
 
 <div align="center">
 
-[![NPM Version](https://img.shields.io/npm/v/@kedoupi/claude-code-kit.svg)](https://npmjs.org/package/@kedoupi/claude-code-kit)
-[![License](https://img.shields.io/npm/l/@kedoupi/claude-code-kit.svg)](https://github.com/kedoupi/claude-code-kit/blob/main/LICENSE)
-[![Node.js Version](https://img.shields.io/node/v/@kedoupi/claude-code-kit.svg)](https://nodejs.org/)
+[![NPM Version](https://img.shields.io/npm/v/@kedoupi/ccvm.svg)](https://npmjs.org/package/@kedoupi/ccvm)
+[![License](https://img.shields.io/npm/l/@kedoupi/ccvm.svg)](https://github.com/kedoupi/claude-code-kit/blob/main/LICENSE)
+[![Node.js Version](https://img.shields.io/node/v/@kedoupi/ccvm.svg)](https://nodejs.org/)
 [![Test Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](https://github.com/kedoupi/claude-code-kit)
 [![CI Status](https://img.shields.io/github/workflow/status/kedoupi/claude-code-kit/CI)](https://github.com/kedoupi/claude-code-kit/actions)
 
-**🚀 专业的 Claude Code 配置管理工具包**
+**🚀 Claude API 提供商版本管理器**
 
-*Professional Configuration Toolkit for Claude Code*
+*Claude API Provider Version Manager - Like nvm for Claude*
 
 [中文](#中文文档) | [English](#english-documentation) | [文档](docs/) | [示例](docs/examples.md) | [FAQ](docs/faq.md)
 
@@ -22,7 +22,7 @@
 
 ### 📖 项目简介
 
-Claude Code Kit 是一个全面的 Claude Code 配置管理工具包，为开发者提供多提供商支持、安全凭据管理和无缝环境设置。通过统一的命令行界面，轻松管理不同的 API 提供商，在多个 Claude 服务之间无缝切换，提升开发效率。
+CCVM（Claude Code Version Manager）是一个专业的 Claude API 提供商版本管理工具，类似于 nvm 管理 Node.js 版本的方式来管理不同的 Claude API 提供商。支持多个自定义 API 端点、密钥管理和环境隔离，让您可以像管理 Node.js 版本一样轻松管理 Claude 服务。
 
 ### ✨ 核心特性
 
@@ -36,58 +36,72 @@ Claude Code Kit 是一个全面的 Claude Code 配置管理工具包，为开发
 
 ### 🚀 快速开始
 
-#### 安装方式
+#### Basic Installation
 
-**方式一：npm 全局安装（推荐）**
+CCVM 可以通过在终端中运行以下命令之一来安装：
+
+| 方式    | 命令                                                                                           |
+| :-------- | :------------------------------------------------------------------------------------------------ |
+| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash` |
+| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash`   |
+
+> **注意**: 安装脚本会智能检测您的环境，并自动备份现有配置。
+
+#### Manual Inspection
+
+您可以在运行前手动检查安装脚本：
+
 ```bash
-npm install -g @kedoupi/claude-code-kit
+curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh -o install.sh
+# 检查脚本内容
+cat install.sh
+# 运行安装
+bash install.sh
 ```
 
-**方式二：一键安装脚本**
-```bash
-curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh | bash
-```
+#### Alternative Installation Methods
 
-**方式三：本地安装**
+**开发模式安装** (适用于贡献者和开发者)
 ```bash
 git clone https://github.com/kedoupi/claude-code-kit.git
 cd claude-code-kit
 npm install
-npm install -g .
+# 在项目目录下运行安装脚本，自动启用开发模式
+./install.sh
 ```
 
 #### 基础使用
 
 1. **添加 API 提供商**
 ```bash
-cc-config provider add
-# 按提示输入：别名、API地址、密钥等信息
+ccvm provider add
+# 按提示输入：提供商名称、API地址、密钥等信息
 ```
 
 2. **列出所有提供商**
 ```bash
-cc-config provider list
+ccvm provider list
 ```
 
 3. **查看提供商详情**
 ```bash
-cc-config provider show <别名>
+ccvm provider show <别名>
 ```
 
 4. **使用提供商**
 ```bash
 # 使用配置的提供商别名直接调用
-your-alias "你的问题"
+cc-your-provider "你的问题"
 
 # 例如：
-claude "解释 React hooks"
-openai "设计一个 REST API"
+cc-anthropic "解释 React hooks"
+cc-custom "设计一个 REST API"
 ```
 
 5. **系统状态检查**
 ```bash
-cc-config status
-cc-config doctor
+ccvm status
+ccvm doctor
 ```
 
 ### 💡 使用示例
@@ -95,51 +109,52 @@ cc-config doctor
 #### 多提供商配置
 ```bash
 # 配置 Anthropic 官方 API
-cc-config provider add
-# 别名: anthropic
+ccvm provider add
+# 提供商名称: anthropic (将创建 cc-anthropic 命令)
 # URL: https://api.anthropic.com
 # 密钥: your-anthropic-key
 
 # 配置自定义 API 服务
-cc-config provider add  
-# 别名: custom
+ccvm provider add  
+# 提供商名称: custom (将创建 cc-custom 命令)
 # URL: https://your-custom-api.com
 # 密钥: your-custom-key
 
 # 使用不同提供商
-anthropic "技术问题咨询"
-custom "使用自定义API的问题"
+cc-anthropic "技术问题咨询"
+cc-custom "使用自定义API的问题"
 ```
 
 #### 团队协作配置
 ```bash
-# 导出配置（去除敏感信息）
-cc-config export --safe > team-config.json
+# 查看当前配置
+ccvm status --detailed
 
-# 团队成员导入配置模板
-cc-config import team-config.json
-# 然后各自添加API密钥
+# 切换默认提供商
+ccvm provider use cc-anthropic
+
+# 查看和管理备份
+ccvm history
 ```
 
 ### 🏗️ 系统架构
 
 ```
-Claude Code Kit
+CCVM (Claude Code Version Manager)
 ├── ConfigManager      # 系统配置管理
 ├── ProviderManager    # API提供商管理  
 ├── BackupManager      # 备份和恢复
-├── AliasGenerator     # Shell别名生成
-└── SecurityManager    # 安全和权限控制
+└── AliasGenerator     # Shell别名生成
 ```
 
 **配置文件结构**
 ```
-~/.cc-config/
+~/.ccvm/
 ├── config.json        # 系统配置
 ├── aliases.sh         # 生成的shell别名
 ├── providers/         # 提供商配置
-│   ├── anthropic.json
-│   └── custom.json
+│   ├── cc-anthropic.json
+│   └── cc-custom.json
 └── backups/           # 自动备份
     └── 2024-01-20_10-30-45/
 ```
@@ -232,7 +247,7 @@ claude-code-kit/
 
 ### 📖 Project Overview
 
-Claude Code Kit is a comprehensive configuration management toolkit for Claude Code, providing multi-provider support, secure credential management, and seamless environment setup. Easily manage different API providers through a unified command-line interface and switch between multiple Claude services effortlessly.
+CCVM (Claude Code Version Manager) is a version management tool similar to nvm, specifically designed for managing Claude API providers. Easily switch between multiple API providers, supporting custom API endpoints, key management, and environment isolation, allowing you to manage Claude services like managing Node.js versions with nvm.
 
 ### ✨ Key Features
 
@@ -246,58 +261,72 @@ Claude Code Kit is a comprehensive configuration management toolkit for Claude C
 
 ### 🚀 Quick Start
 
-#### Installation Methods
+#### Basic Installation
 
-**Method 1: Global npm install (Recommended)**
+CCVM can be installed by running one of the following commands in your terminal:
+
+| Method    | Command                                                                                           |
+| :-------- | :------------------------------------------------------------------------------------------------ |
+| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash` |
+| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash`   |
+
+> **Note**: The install script will intelligently detect your environment and automatically backup existing configurations.
+
+#### Manual Inspection
+
+You can manually inspect the install script before running:
+
 ```bash
-npm install -g @kedoupi/claude-code-kit
+curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh -o install.sh
+# Inspect the script content
+cat install.sh
+# Run installation
+bash install.sh
 ```
 
-**Method 2: One-line install script**
-```bash
-curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh | bash
-```
+#### Alternative Installation Methods
 
-**Method 3: Local installation**
+**Development Mode Installation** (for contributors and developers)
 ```bash
 git clone https://github.com/kedoupi/claude-code-kit.git
 cd claude-code-kit
 npm install
-npm install -g .
+# Run install script in project directory, automatically enables dev mode
+./install.sh
 ```
 
 #### Basic Usage
 
 1. **Add API Provider**
 ```bash
-cc-config provider add
-# Follow prompts to enter: alias, API URL, key, etc.
+ccvm provider add
+# Follow prompts to enter: provider name, API URL, key, etc.
 ```
 
 2. **List All Providers**
 ```bash
-cc-config provider list
+ccvm provider list
 ```
 
 3. **Show Provider Details**
 ```bash
-cc-config provider show <alias>
+ccvm provider show <alias>
 ```
 
 4. **Use Provider**
 ```bash
-# Use configured provider alias directly
-your-alias "your question"
+# Use configured provider alias directly (auto-prefixed with cc-)
+cc-your-provider "your question"
 
 # Examples:
-claude "Explain React hooks"
-openai "Design a REST API"
+cc-anthropic "Explain React hooks"
+cc-custom "Design a REST API"
 ```
 
 5. **System Status Check**
 ```bash
-cc-config status
-cc-config doctor
+ccvm status
+ccvm doctor
 ```
 
 ### 💡 Usage Examples
@@ -305,51 +334,52 @@ cc-config doctor
 #### Multi-Provider Configuration
 ```bash
 # Configure Anthropic official API
-cc-config provider add
-# Alias: anthropic
+ccvm provider add
+# Provider name: anthropic (will create cc-anthropic command)
 # URL: https://api.anthropic.com
 # Key: your-anthropic-key
 
 # Configure custom API service
-cc-config provider add  
-# Alias: custom
+ccvm provider add  
+# Provider name: custom (will create cc-custom command)
 # URL: https://your-custom-api.com
 # Key: your-custom-key
 
 # Use different providers
-anthropic "Technical consultation"
-custom "Question using custom API"
+cc-anthropic "Technical consultation"
+cc-custom "Question using custom API"
 ```
 
 #### Team Collaboration Setup
 ```bash
-# Export configuration (without sensitive data)
-cc-config export --safe > team-config.json
+# View current configuration
+ccvm status --detailed
 
-# Team members import configuration template
-cc-config import team-config.json
-# Then each adds their API keys
+# Switch default provider
+ccvm provider use cc-anthropic
+
+# View and manage backups
+ccvm history
 ```
 
 ### 🏗️ System Architecture
 
 ```
-Claude Code Kit
+CCVM (Claude Code Version Manager)
 ├── ConfigManager      # System configuration management
 ├── ProviderManager    # API provider management  
 ├── BackupManager      # Backup and restore
-├── AliasGenerator     # Shell alias generation
-└── SecurityManager    # Security and permission control
+└── AliasGenerator     # Shell alias generation
 ```
 
 **Configuration File Structure**
 ```
-~/.cc-config/
+~/.ccvm/
 ├── config.json        # System configuration
 ├── aliases.sh         # Generated shell aliases
 ├── providers/         # Provider configurations
-│   ├── anthropic.json
-│   └── custom.json
+│   ├── cc-anthropic.json
+│   └── cc-custom.json
 └── backups/           # Automatic backups
     └── 2024-01-20_10-30-45/
 ```
@@ -399,7 +429,7 @@ claude-code-kit/
 │   │   ├── BackupManager.js
 │   │   └── AliasGenerator.js
 │   └── utils/         # Utility functions
-├── bin/               # CLI entry point
+├── bin/               # CLI entry point (ccvm.js)
 ├── tests/             # Test files
 ├── docs/              # Project documentation
 └── install.sh         # Installation script

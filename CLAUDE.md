@@ -54,12 +54,12 @@ ccvm --help
 ccvm status
 
 # Uninstall after testing
-npm uninstall -g @kedoupi/claude-code-kit
+npm uninstall -g @kedoupi/ccvm
 ```
 
 ## Core Architecture
 
-The system follows a modular architecture with four core managers:
+The system follows a modular architecture with five core managers:
 
 ### ConfigManager (`src/core/ConfigManager.js`)
 - **Purpose**: Overall system configuration and initialization
@@ -85,13 +85,19 @@ The system follows a modular architecture with four core managers:
 - **Output**: `~/.ccvm/aliases.sh`
 - **Design**: Simplified to avoid command proliferation - only core aliases, no `-info` variants
 
+### UpdateManager (`src/core/UpdateManager.js`)
+- **Purpose**: Configuration template updates from remote repositories
+- **Key Features**: Safe downloading, merging, and applying remote configuration updates
+- **Location**: Downloads to `~/.ccvm/.update-temp/`
+- **Security**: HTTPS-only downloads with integrity verification
+
 ## Key Design Decisions
 
 ### Provider Management Simplification
-The system was recently refactored to eliminate redundant `-info` commands:
-- **Before**: Each provider generated 2 aliases (`cc`, `cc-info`)
-- **After**: Each provider generates 1 alias (`cc`) + unified management (`ccvm provider show <alias>`)
-- **Benefit**: 50% reduction in shell command pollution, unified management interface
+The system follows a clean design to eliminate command redundancy:
+- **Design**: Each provider generates 1 alias (e.g., `cc-anthropic`) + unified management via `ccvm` commands
+- **Management**: Use `ccvm provider show <alias>` for detailed provider information
+- **Benefit**: Clean shell environment with focused command structure and unified management interface
 
 ### Security Model
 - **Credential Storage**: API keys stored in individual JSON files with 600 permissions
@@ -112,10 +118,10 @@ The system was recently refactored to eliminate redundant `-info` commands:
 ├── aliases.sh               # Generated shell aliases
 ├── history.json            # Operation history
 ├── providers/              # Provider configurations
-│   ├── cc.json            # Provider config (600 permissions)
-│   └── zt.json            # Another provider config
+│   ├── cc-anthropic.json  # Anthropic provider config (600 permissions)
+│   └── cc-custom.json     # Custom provider config
 └── backups/               # Automatic backups
-    └── 2025-01-22_10-30-45/  # Timestamped backup
+    └── 2025-08-26_10-30-45/  # Timestamped backup
 ```
 
 ## Testing Architecture

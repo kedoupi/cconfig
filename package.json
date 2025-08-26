@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Claude Code Version Manager - manage Claude API providers like nvm",
   "main": "src/index.js",
+  "bin": {
+    "ccvm": "bin/ccvm.js"
+  },
   "scripts": {
     "start": "node bin/ccvm.js",
     "test": "jest",

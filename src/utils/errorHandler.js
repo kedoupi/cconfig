@@ -11,7 +11,7 @@ const os = require('os');
 
 class ErrorHandler {
   constructor() {
-    this.logFile = path.join(os.homedir(), '.cc-config', 'error.log');
+    this.logFile = path.join(os.homedir(), '.ccvm', 'error.log');
     this.maxLogSize = 10 * 1024 * 1024; // 10MB
     this.maxLogFiles = 3;
   }
@@ -196,9 +196,9 @@ class ErrorHandler {
         'Try running with elevated permissions if necessary'
       ],
       configuration: [
-        'Run "cc-config validate --fix" to check and repair configuration',
+        'Run "ccvm doctor --fix" to check and repair configuration',
         'Check if all required files exist',
-        'Consider restoring from a backup using "cc-config history"',
+        'Consider restoring from a backup using "ccvm history"',
         'Reinstall using the install script if issues persist'
       ],
       permission: [
@@ -210,7 +210,7 @@ class ErrorHandler {
       validation: [
         'Double-check your input values',
         'Verify configuration file syntax',
-        'Use "cc-config doctor" to diagnose system issues',
+        'Use "ccvm doctor" to diagnose system issues',
         'Refer to documentation for correct format'
       ],
       lock: [
@@ -227,7 +227,7 @@ class ErrorHandler {
       ],
       unknown: [
         'Check the error log for more details',
-        'Try running "cc-config doctor" for system diagnostics',
+        'Try running "ccvm doctor" for system diagnostics',
         'Report the issue if it persists',
         'Include the timestamp and log file when seeking support'
       ]
@@ -354,12 +354,12 @@ class ErrorHandler {
       case 'configuration':
         options.push({
           name: 'Validate and fix configuration',
-          command: 'cc-config validate --fix',
+          command: 'ccvm doctor --fix',
           safe: true
         });
         options.push({
           name: 'Restore from backup',
-          command: 'cc-config history',
+          command: 'ccvm history',
           safe: true
         });
         break;
@@ -367,7 +367,7 @@ class ErrorHandler {
       case 'filesystem':
         options.push({
           name: 'Check system status',
-          command: 'cc-config doctor',
+          command: 'ccvm doctor',
           safe: true
         });
         break;
@@ -383,7 +383,7 @@ class ErrorHandler {
       default:
         options.push({
           name: 'Run system diagnostics',
-          command: 'cc-config doctor',
+          command: 'ccvm doctor',
           safe: true
         });
     }

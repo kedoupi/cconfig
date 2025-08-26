@@ -37,6 +37,39 @@ class TestUtils {
   }
 
   /**
+   * Create a complete test environment
+   */
+  async createTestEnvironment(prefix = 'test-env') {
+    const tempDir = await this.createTempDir(prefix);
+    const configDir = path.join(tempDir, '.ccvm');
+    const claudeDir = path.join(tempDir, '.claude');
+    
+    const config = await this.createTestConfigStructure(configDir);
+    const claude = await this.createTestClaudeStructure(claudeDir);
+    
+    return {
+      tempDir,
+      configDir,
+      claudeDir,
+      config,
+      claude
+    };
+  }
+
+  /**
+   * Clean up test environment
+   */
+  async cleanupTestEnvironment(configDir) {
+    const tempDir = path.dirname(configDir);
+    try {
+      await fs.remove(tempDir);
+      this.tempDirs.delete(tempDir);
+    } catch (error) {
+      console.warn(`Failed to cleanup test environment ${tempDir}:`, error.message);
+    }
+  }
+
+  /**
    * Create a test configuration directory structure
    */
   async createTestConfigStructure(baseDir) {
@@ -44,8 +77,7 @@ class TestUtils {
       configDir: baseDir,
       providersDir: path.join(baseDir, 'providers'),
       backupsDir: path.join(baseDir, 'backups'),
-      aliasesFile: path.join(baseDir, 'aliases.sh'),
-      historyFile: path.join(baseDir, 'history.json')
+      aliasesFile: path.join(baseDir, 'aliases.sh')
     };
 
     // Create directories
@@ -54,7 +86,6 @@ class TestUtils {
 
     // Create initial files
     await fs.writeFile(structure.aliasesFile, '# Test aliases\n');
-    await fs.writeJson(structure.historyFile, { version: '1.0', backups: [] });
 
     return structure;
   }
@@ -374,5 +405,10 @@ class TestUtils {
   }
 }
 
-// Export singleton instance
-module.exports = new TestUtils();
+// Create singleton instance
+const testUtils = new TestUtils();
+
+// Export both the instance and specific functions for convenience
+module.exports = testUtils;
+module.exports.createTestEnvironment = testUtils.createTestEnvironment.bind(testUtils);
+module.exports.cleanupTestEnvironment = testUtils.cleanupTestEnvironment.bind(testUtils);

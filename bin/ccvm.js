@@ -126,7 +126,22 @@ providerCmd
       await providerManager.addProvider(providerData);
       await aliasGenerator.generateAliases();
       
-      addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully!`));
+      // 检查是否需要设置为默认provider
+      const providers = await providerManager.listProviders();
+      const currentConfig = await configManager.getConfig();
+      
+      if (providers.length === 1 || !currentConfig.defaultProvider) {
+        // 如果是第一个provider或没有默认provider，自动设为默认
+        await fs.writeJson(path.join(configManager.getConfigDir(), 'config.json'), {
+          ...currentConfig,
+          defaultProvider: providerData.alias,
+          lastUpdated: new Date().toISOString()
+        }, { spaces: 2 });
+        
+        addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully and set as default!`));
+      } else {
+        addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully!`));
+      }
       
       console.log(chalk.green('\n✅ Provider ready to use!'));
       console.log(chalk.yellow('\n🔄 For immediate use in current session:'));
@@ -372,6 +387,7 @@ providerCmd
         // 显示当前默认provider
         const config = await configManager.getConfig();
         const defaultProvider = config.defaultProvider;
+        const providers = await providerManager.listProviders();
         
         if (defaultProvider) {
           const provider = await providerManager.getProvider(defaultProvider);
@@ -382,8 +398,28 @@ providerCmd
           }
         }
         
-        console.log(chalk.yellow('No default provider set'));
-        console.log('Usage: ccvm provider use <alias>');
+        // 如果没有默认provider但只有一个provider，自动设置为默认
+        if (!defaultProvider && providers.length === 1) {
+          const provider = providers[0];
+          await fs.writeJson(path.join(configManager.getConfigDir(), 'config.json'), {
+            ...config,
+            defaultProvider: provider.alias,
+            lastUpdated: new Date().toISOString()
+          }, { spaces: 2 });
+          
+          console.log(chalk.green(`📡 Auto-selected default provider: ${provider.alias}`));
+          console.log(chalk.dim(`   ${provider.baseURL}`));
+          return;
+        }
+        
+        if (providers.length === 0) {
+          console.log(chalk.yellow('No providers configured yet'));
+          console.log('Usage: ccvm provider add');
+        } else {
+          console.log(chalk.yellow('No default provider set'));
+          console.log('Usage: ccvm provider use <alias>');
+          console.log(chalk.dim(`Available providers: ${providers.map(p => p.alias).join(', ')}`));
+        }
         return;
       }
       
@@ -468,8 +504,7 @@ program
       console.log(chalk.cyan('\nConfiguration:'));
       console.log(`  Providers: ${providers.length} configured`);
       console.log(`  Backups: ${backups.length} available`);
-      console.log(`  Auto Backup: ${config.features?.autoBackup ? '✓' : '✗'}`);
-      console.log(`  Validation: ${config.features?.validateConfigs ? '✓' : '✗'}`);
+      console.log(`  Default Provider: ${config.defaultProvider || 'None'}`);
       console.log(`  Last Update: ${backups.length > 0 ? backups[0].timestamp : 'Never'}`);
 
       // Directory status
