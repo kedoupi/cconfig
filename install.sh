@@ -15,7 +15,7 @@ NC='\033[0m' # 无色
 
 # 基础配置
 CCVM_DIR="${HOME}/.ccvm"
-GITHUB_REPO="kedoupi/claude-code-kit"
+GITHUB_REPO="kedoupi/ccvm"
 GITHUB_BRANCH="main"
 
 # 基础日志函数
@@ -501,6 +501,6 @@ main() {
 }
 
 # 如果脚本直接执行则运行主函数
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
     main "$@"
 fi
