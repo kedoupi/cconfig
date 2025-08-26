@@ -205,11 +205,37 @@ install_ccvm() {
         # 生产模式：克隆完整仓库
         info "生产模式：从 GitHub 克隆..."
         
-        git clone "https://github.com/${GITHUB_REPO}.git" "$CCVM_DIR" || error "克隆仓库失败"
-        
-        # 切换到指定分支
-        cd "$CCVM_DIR"
-        git checkout "$GITHUB_BRANCH" 2>/dev/null || true
+        # 如果目录已存在，先备份非git内容，然后清理
+        if [ -d "$CCVM_DIR" ]; then
+            local temp_backup="$CCVM_DIR.backup.$$"
+            mv "$CCVM_DIR" "$temp_backup"
+            
+            # 克隆仓库到新目录
+            git clone "https://github.com/${GITHUB_REPO}.git" "$CCVM_DIR" || {
+                # 如果克隆失败，恢复备份
+                mv "$temp_backup" "$CCVM_DIR"
+                error "克隆仓库失败"
+            }
+            
+            # 切换到指定分支
+            cd "$CCVM_DIR"
+            git checkout "$GITHUB_BRANCH" 2>/dev/null || true
+            
+            # 恢复之前的备份内容（如配置文件等）
+            if [ -d "$temp_backup/claude_backup" ]; then
+                mv "$temp_backup/claude_backup" "$CCVM_DIR/"
+            fi
+            
+            # 清理临时备份
+            rm -rf "$temp_backup"
+        else
+            # 目录不存在，直接克隆
+            git clone "https://github.com/${GITHUB_REPO}.git" "$CCVM_DIR" || error "克隆仓库失败"
+            
+            # 切换到指定分支
+            cd "$CCVM_DIR"
+            git checkout "$GITHUB_BRANCH" 2>/dev/null || true
+        fi
         
         # 安装依赖
         info "安装 Node.js 依赖..."
