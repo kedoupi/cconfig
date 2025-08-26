@@ -51,12 +51,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kedoupi/claude-code-kit.git"
+    "url": "git+https://github.com/kedoupi/ccvm.git"
   },
   "bugs": {
-    "url": "https://github.com/kedoupi/claude-code-kit/issues"
+    "url": "https://github.com/kedoupi/ccvm/issues"
   },
-  "homepage": "https://github.com/kedoupi/claude-code-kit#readme",
+  "homepage": "https://github.com/kedoupi/ccvm#readme",
   "files": [
     "bin/",
     "src/",

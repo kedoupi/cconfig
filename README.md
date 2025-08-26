@@ -3,10 +3,10 @@
 <div align="center">
 
 [![NPM Version](https://img.shields.io/npm/v/@kedoupi/ccvm.svg)](https://npmjs.org/package/@kedoupi/ccvm)
-[![License](https://img.shields.io/npm/l/@kedoupi/ccvm.svg)](https://github.com/kedoupi/claude-code-kit/blob/main/LICENSE)
+[![License](https://img.shields.io/npm/l/@kedoupi/ccvm.svg)](https://github.com/kedoupi/ccvm/blob/main/LICENSE)
 [![Node.js Version](https://img.shields.io/node/v/@kedoupi/ccvm.svg)](https://nodejs.org/)
-[![Test Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](https://github.com/kedoupi/claude-code-kit)
-[![CI Status](https://img.shields.io/github/workflow/status/kedoupi/claude-code-kit/CI)](https://github.com/kedoupi/claude-code-kit/actions)
+[![Test Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](https://github.com/kedoupi/ccvm)
+[![CI Status](https://img.shields.io/github/workflow/status/kedoupi/ccvm/CI)](https://github.com/kedoupi/ccvm/actions)
 
 **🚀 Claude API 提供商版本管理器**
 
@@ -42,8 +42,8 @@ CCVM 可以通过在终端中运行以下命令之一来安装：
 
 | 方式    | 命令                                                                                           |
 | :-------- | :------------------------------------------------------------------------------------------------ |
-| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash` |
-| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash`   |
+| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh \| bash` |
+| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh \| bash`   |
 
 > **注意**: 安装脚本会智能检测您的环境，并自动备份现有配置。
 
@@ -52,7 +52,7 @@ CCVM 可以通过在终端中运行以下命令之一来安装：
 您可以在运行前手动检查安装脚本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh -o install.sh
 # 检查脚本内容
 cat install.sh
 # 运行安装
@@ -63,8 +63,8 @@ bash install.sh
 
 **开发模式安装** (适用于贡献者和开发者)
 ```bash
-git clone https://github.com/kedoupi/claude-code-kit.git
-cd claude-code-kit
+git clone https://github.com/kedoupi/ccvm.git
+cd ccvm
 npm install
 # 在项目目录下运行安装脚本，自动启用开发模式
 ./install.sh
@@ -196,7 +196,7 @@ npm run test:integration
 
 #### 项目结构
 ```
-claude-code-kit/
+ccvm/
 ├── src/                # 源代码
 │   ├── core/          # 核心管理器
 │   │   ├── ConfigManager.js
@@ -267,8 +267,8 @@ CCVM can be installed by running one of the following commands in your terminal:
 
 | Method    | Command                                                                                           |
 | :-------- | :------------------------------------------------------------------------------------------------ |
-| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash` |
-| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh \| bash`   |
+| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh \| bash` |
+| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh \| bash`   |
 
 > **Note**: The install script will intelligently detect your environment and automatically backup existing configurations.
 
@@ -277,7 +277,7 @@ CCVM can be installed by running one of the following commands in your terminal:
 You can manually inspect the install script before running:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kedoupi/claude-code-kit/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh -o install.sh
 # Inspect the script content
 cat install.sh
 # Run installation
@@ -288,8 +288,8 @@ bash install.sh
 
 **Development Mode Installation** (for contributors and developers)
 ```bash
-git clone https://github.com/kedoupi/claude-code-kit.git
-cd claude-code-kit
+git clone https://github.com/kedoupi/ccvm.git
+cd ccvm
 npm install
 # Run install script in project directory, automatically enables dev mode
 ./install.sh
@@ -421,7 +421,7 @@ npm run test:integration
 
 #### Project Structure
 ```
-claude-code-kit/
+ccvm/
 ├── src/                # Source code
 │   ├── core/          # Core managers
 │   │   ├── ConfigManager.js
@@ -468,8 +468,8 @@ We welcome all forms of contributions!
 
 ### 🌟 Community
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/kedoupi/claude-code-kit/issues)
-- **Discussions**: [Join community discussions](https://github.com/kedoupi/claude-code-kit/discussions)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/kedoupi/ccvm/issues)
+- **Discussions**: [Join community discussions](https://github.com/kedoupi/ccvm/discussions)
 - **Documentation**: [Comprehensive guides and examples](docs/)
 
 ### 📄 License
@@ -486,6 +486,6 @@ Thanks to all developers and community members who contributed to this project!
 
 **Made with ❤️ by the Claude Code Kit community**
 
-[⭐ Star us on GitHub](https://github.com/kedoupi/claude-code-kit) | [🐛 Report Issues](https://github.com/kedoupi/claude-code-kit/issues) | [📖 Read Docs](docs/)
+[⭐ Star us on GitHub](https://github.com/kedoupi/ccvm) | [🐛 Report Issues](https://github.com/kedoupi/ccvm/issues) | [📖 Read Docs](docs/)
 
 </div>
