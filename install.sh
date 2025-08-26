@@ -251,9 +251,9 @@ install_ccvm() {
 # 同步 Claude 配置
 sync_claude_config() {
     local claude_template_dir
-    local mode=$(detect_mode)
     
-    if [ "$mode" = "dev" ]; then
+    # 检查是否为开发模式（通过 dev_path 文件是否存在判断）
+    if [ -f "$CCVM_DIR/dev_path" ]; then
         claude_template_dir="$(cat "$CCVM_DIR/dev_path")/.claude"
     else
         claude_template_dir="$CCVM_DIR/.claude"
