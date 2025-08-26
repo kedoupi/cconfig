@@ -372,10 +372,25 @@ setup_first_provider() {
     
     # 询问是否要配置
     echo -e "${YELLOW}是否现在配置第一个 provider？ (推荐) [Y/n]:${NC}"
-    read -r setup_provider
     
-    if [[ "$setup_provider" =~ ^[Nn]$ ]]; then
-        info "跳过初始配置，您稍后可运行 'ccvm provider add' 来添加"
+    # 检测是否为交互式环境
+    if [ -t 0 ] && [ -t 1 ]; then
+        # 标准输入和输出都是终端，可以进行交互
+        read -r setup_provider
+        
+        if [[ "$setup_provider" =~ ^[Nn]$ ]]; then
+            info "跳过初始配置，您稍后可运行 'ccvm provider add' 来添加"
+            return 0
+        fi
+    else
+        # 非交互式环境（如管道），跳过配置并提供指导
+        echo "检测到非交互式安装环境，跳过 provider 配置"
+        echo
+        info "安装完成后，请按以下步骤手动配置："
+        echo "1. 重新加载 shell 配置: source ~/.zshrc (或重启终端)"
+        echo "2. 添加 provider: ccvm provider add"
+        echo "3. 查看状态: ccvm status"
+        echo "4. 开始使用: cc-<your-provider> \"your question\""
         return 0
     fi
     
