@@ -239,7 +239,10 @@ install_ccvm() {
         
         # 安装依赖
         info "安装 Node.js 依赖..."
-        npm install --production --silent || error "依赖安装失败"
+        if ! npm install --production; then
+            warn "生产依赖安装失败，尝试完整安装..."
+            npm install || error "依赖安装失败，请检查网络连接和 Node.js 版本"
+        fi
     fi
     
     success "CCVM 核心安装完成"
