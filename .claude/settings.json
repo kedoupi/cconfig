@@ -28,5 +28,10 @@
     "validateApiKeys": true,
     "encryptSensitiveData": true,
     "logLevel": "info"
+  },
+  "statusLine": {
+    "type": "command", 
+    "command": "~/.claude/ccline/ccline",
+    "padding": 0
   }
 }

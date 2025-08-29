@@ -339,9 +339,18 @@ ccvm() {
     node "$ccvm_bin_path" "\$@"
 }
 
-# Dynamic claude function - delegates to ccvm exec
+# Dynamic claude function - loads CCVM config then calls native claude
 claude() {
-    ccvm exec "\$@"
+    # Load environment variables from CCVM
+    eval "\$(ccvm env 2>/dev/null)"
+    if [ \$? -ne 0 ]; then
+        echo "❌ Failed to load CCVM configuration"
+        echo "💡 Run: ccvm add"
+        return 1
+    fi
+    
+    # Call the native claude command
+    command claude "\$@"
 }
 EOF
     

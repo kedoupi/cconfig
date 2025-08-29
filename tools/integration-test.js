@@ -426,7 +426,7 @@ class IntegrationTest {
 if (require.main === module) {
   const test = new IntegrationTest();
   test.runTests().catch(error => {
-    console.error('❌ Test execution failed:', error);
+    console.error('❌ Test execution failed:', error.message || error);
     process.exit(1);
   });
 }

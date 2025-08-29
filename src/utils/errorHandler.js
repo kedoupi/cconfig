@@ -59,7 +59,7 @@ class ErrorHandler {
     } catch (logError) {
       // If logging fails, write to stderr
       console.error('Failed to log error:', logError.message);
-      console.error('Original error:', errorInfo);
+      console.error('Original error:', JSON.stringify(errorInfo, null, 2));
     }
   }
 

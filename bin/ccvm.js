@@ -682,6 +682,53 @@ program
     }
   });
 
+// Env command - output environment variables for current default provider
+program
+  .command('env')
+  .description('Output environment variables for current default provider')
+  .option('--shell <shell>', 'Shell format (bash, zsh, fish)', 'bash')
+  .action(async (options) => {
+    try {
+      await configManager.init();
+      
+      // Get current configuration
+      const config = await configManager.getConfig();
+      const defaultProvider = config.defaultProvider;
+      
+      if (!defaultProvider) {
+        console.error('# No default provider configured');
+        console.error('# Run: ccvm add');
+        console.error('# Then: ccvm use <alias>');
+        process.exit(1);
+      }
+      
+      // Load provider configuration
+      const provider = await providerManager.getProvider(defaultProvider);
+      if (!provider) {
+        console.error(`# Provider '${defaultProvider}' not found`);
+        console.error('# Run: ccvm list');
+        process.exit(1);
+      }
+      
+      // Output environment variables in shell format
+      const shell = options.shell.toLowerCase();
+      if (shell === 'fish') {
+        console.log(`set -x ANTHROPIC_AUTH_TOKEN "${provider.apiKey}";`);
+        console.log(`set -x ANTHROPIC_BASE_URL "${provider.baseURL}";`);
+        console.log(`set -x API_TIMEOUT_MS "${provider.timeout || '3000000'}";`);
+      } else {
+        // bash/zsh format
+        console.log(`export ANTHROPIC_AUTH_TOKEN="${provider.apiKey}";`);
+        console.log(`export ANTHROPIC_BASE_URL="${provider.baseURL}";`);
+        console.log(`export API_TIMEOUT_MS="${provider.timeout || '3000000'}";`);
+      }
+      
+    } catch (error) {
+      console.error(`# Error: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
 // Exec command - execute claude with current default configuration
 program
   .command('exec')

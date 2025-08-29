@@ -29,7 +29,7 @@ CCVM（Claude Code Version Manager）是一个专业的 Claude API 提供商版�
 - 🔧 **多提供商支持** - 轻松配置和切换多个 Claude API 提供商
 - 🛡️ **安全凭据管理** - 安全存储和管理 API 密钥，支持权限控制
 - 🚀 **一键安装配置** - 自动环境检测，智能安装和配置
-- 📦 **智能别名系统** - 自动生成 shell 别名，快速切换提供商
+- ⚡ **智能Claude集成** - 无缝集成原生Claude命令，自动环境变量配置
 - 🔄 **自动备份恢复** - 配置变更自动备份，支持一键恢复
 - 🩺 **系统诊断工具** - 全面的系统检查和问题诊断
 - 🎯 **简洁设计理念** - 减少命令冗余，统一管理界面
@@ -74,28 +74,31 @@ npm install
 
 1. **添加 API 提供商**
 ```bash
-ccvm provider add
+ccvm add
 # 按提示输入：提供商名称、API地址、密钥等信息
 ```
 
 2. **列出所有提供商**
 ```bash
-ccvm provider list
+ccvm list
 ```
 
 3. **查看提供商详情**
 ```bash
-ccvm provider show <别名>
+ccvm show <别名>
 ```
 
 4. **使用提供商**
 ```bash
-# 使用配置的提供商别名直接调用
-cc-your-provider "你的问题"
+# 设置默认提供商
+ccvm use <别名>
+
+# 使用claude命令（自动加载CCVM配置）
+claude "你的问题"
 
 # 例如：
-cc-anthropic "解释 React hooks"
-cc-custom "设计一个 REST API"
+claude "解释 React hooks"
+claude "设计一个 REST API"
 ```
 
 5. **系统状态检查**
@@ -109,20 +112,23 @@ ccvm doctor
 #### 多提供商配置
 ```bash
 # 配置 Anthropic 官方 API
-ccvm provider add
-# 提供商名称: anthropic (将创建 cc-anthropic 命令)
+ccvm add
+# 提供商名称: anthropic
 # URL: https://api.anthropic.com
 # 密钥: your-anthropic-key
 
 # 配置自定义 API 服务
-ccvm provider add  
-# 提供商名称: custom (将创建 cc-custom 命令)
+ccvm add  
+# 提供商名称: custom
 # URL: https://your-custom-api.com
 # 密钥: your-custom-key
 
-# 使用不同提供商
-cc-anthropic "技术问题咨询"
-cc-custom "使用自定义API的问题"
+# 切换和使用不同提供商
+ccvm use anthropic
+claude "技术问题咨询"
+
+ccvm use custom  
+claude "使用自定义API的问题"
 ```
 
 #### 团队协作配置
@@ -131,7 +137,7 @@ cc-custom "使用自定义API的问题"
 ccvm status --detailed
 
 # 切换默认提供商
-ccvm provider use cc-anthropic
+ccvm use anthropic
 
 # 查看和管理备份
 ccvm history
@@ -147,14 +153,39 @@ CCVM (Claude Code Version Manager)
 └── AliasGenerator     # Shell别名生成
 ```
 
+### ⚡ 技术实现
+
+**智能Claude函数集成**
+```bash
+# CCVM重新定义了claude函数，实现无缝集成：
+claude() {
+    # 1. 动态加载CCVM环境变量
+    eval "$(ccvm env 2>/dev/null)"
+    
+    # 2. 检查配置有效性
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to load CCVM configuration"
+        return 1
+    fi
+    
+    # 3. 调用原生Claude命令
+    command claude "$@"
+}
+```
+
+**工作流程**
+1. 📡 `ccvm env` 输出当前provider的环境变量设置
+2. 🔧 claude函数自动加载这些环境变量
+3. 🚀 直接调用原生Claude CLI，传递所有参数
+4. ✅ 完全透明的体验，无需额外配置
+
 **配置文件结构**
 ```
-~/.ccvm/
+~/.claude/ccvm/
 ├── config.json        # 系统配置
-├── aliases.sh         # 生成的shell别名
 ├── providers/         # 提供商配置
-│   ├── cc-anthropic.json
-│   └── cc-custom.json
+│   ├── anthropic.json
+│   └── custom.json
 └── backups/           # 自动备份
     └── 2024-01-20_10-30-45/
 ```
@@ -254,7 +285,7 @@ CCVM (Claude Code Version Manager) is a version management tool similar to nvm, 
 - 🔧 **Multi-Provider Support** - Easy configuration and switching between multiple Claude API providers
 - 🛡️ **Secure Credential Management** - Safe storage and management of API keys with permission control
 - 🚀 **One-Click Installation** - Automatic environment detection with intelligent setup
-- 📦 **Smart Alias System** - Auto-generated shell aliases for quick provider switching
+- ⚡ **Smart Claude Integration** - Seamless integration with native Claude command, automatic environment setup
 - 🔄 **Automatic Backup & Restore** - Auto-backup on configuration changes with one-click restore
 - 🩺 **System Diagnostics** - Comprehensive system checks and issue diagnosis
 - 🎯 **Clean Design** - Reduced command redundancy with unified management interface
@@ -299,28 +330,31 @@ npm install
 
 1. **Add API Provider**
 ```bash
-ccvm provider add
+ccvm add
 # Follow prompts to enter: provider name, API URL, key, etc.
 ```
 
 2. **List All Providers**
 ```bash
-ccvm provider list
+ccvm list
 ```
 
 3. **Show Provider Details**
 ```bash
-ccvm provider show <alias>
+ccvm show <alias>
 ```
 
 4. **Use Provider**
 ```bash
-# Use configured provider alias directly (auto-prefixed with cc-)
-cc-your-provider "your question"
+# Set default provider
+ccvm use <alias>
+
+# Use claude command (automatically loads CCVM config)
+claude "your question"
 
 # Examples:
-cc-anthropic "Explain React hooks"
-cc-custom "Design a REST API"
+claude "Explain React hooks"
+claude "Design a REST API"
 ```
 
 5. **System Status Check**
@@ -334,20 +368,23 @@ ccvm doctor
 #### Multi-Provider Configuration
 ```bash
 # Configure Anthropic official API
-ccvm provider add
-# Provider name: anthropic (will create cc-anthropic command)
+ccvm add
+# Provider name: anthropic
 # URL: https://api.anthropic.com
 # Key: your-anthropic-key
 
 # Configure custom API service
-ccvm provider add  
-# Provider name: custom (will create cc-custom command)
+ccvm add  
+# Provider name: custom
 # URL: https://your-custom-api.com
 # Key: your-custom-key
 
-# Use different providers
-cc-anthropic "Technical consultation"
-cc-custom "Question using custom API"
+# Switch between and use different providers
+ccvm use anthropic
+claude "Technical consultation"
+
+ccvm use custom
+claude "Question using custom API"
 ```
 
 #### Team Collaboration Setup
@@ -356,7 +393,7 @@ cc-custom "Question using custom API"
 ccvm status --detailed
 
 # Switch default provider
-ccvm provider use cc-anthropic
+ccvm use anthropic
 
 # View and manage backups
 ccvm history
@@ -372,14 +409,39 @@ CCVM (Claude Code Version Manager)
 └── AliasGenerator     # Shell alias generation
 ```
 
+### ⚡ Technical Implementation
+
+**Smart Claude Function Integration**
+```bash
+# CCVM redefines the claude function for seamless integration:
+claude() {
+    # 1. Dynamically load CCVM environment variables
+    eval "$(ccvm env 2>/dev/null)"
+    
+    # 2. Check configuration validity
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to load CCVM configuration"
+        return 1
+    fi
+    
+    # 3. Call native Claude command
+    command claude "$@"
+}
+```
+
+**Workflow**
+1. 📡 `ccvm env` outputs current provider's environment variable settings
+2. 🔧 claude function automatically loads these environment variables
+3. 🚀 Directly calls native Claude CLI, passing all arguments
+4. ✅ Completely transparent experience, no additional configuration needed
+
 **Configuration File Structure**
 ```
-~/.ccvm/
+~/.claude/ccvm/
 ├── config.json        # System configuration
-├── aliases.sh         # Generated shell aliases
 ├── providers/         # Provider configurations
-│   ├── cc-anthropic.json
-│   └── cc-custom.json
+│   ├── anthropic.json
+│   └── custom.json
 └── backups/           # Automatic backups
     └── 2024-01-20_10-30-45/
 ```
