@@ -13,8 +13,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # 无色
 
-# 基础配置
-CCVM_DIR="${HOME}/.ccvm"
+# 基础配置  
+CLAUDE_DIR="${HOME}/.claude"
+CCVM_DIR="${HOME}/.claude/ccvm"
 GITHUB_REPO="kedoupi/ccvm"
 GITHUB_BRANCH="main"
 
@@ -115,17 +116,46 @@ check_dependencies() {
     fi
 }
 
-# 备份现有的 Claude 配置
-backup_claude_config() {
-    if [ -d "${HOME}/.claude" ]; then
-        local backup_dir="${CCVM_DIR}/claude_backup/$(date +%Y%m%d_%H%M%S)"
+# 迁移旧的 CCVM 配置并备份现有 Claude 配置
+migrate_and_backup_config() {
+    # 迁移旧的 ~/.ccvm 配置到新位置
+    if [ -d "${HOME}/.ccvm" ] && [ ! -d "$CCVM_DIR" ]; then
+        info "检测到旧的 CCVM 配置，正在迁移到 ~/.claude/ccvm..."
+        
+        # 确保目标目录存在
+        mkdir -p "$CCVM_DIR"
+        
+        # 迁移配置文件
+        if [ -d "${HOME}/.ccvm" ]; then
+            cp -r "${HOME}/.ccvm/"* "$CCVM_DIR/" 2>/dev/null || true
+            
+            # 创建迁移标记
+            echo "$(date): 从 ~/.ccvm 迁移" > "$CCVM_DIR/.migrated_from_old_location"
+            
+            # 备份旧配置后删除
+            local old_backup="${HOME}/.ccvm_backup_$(date +%Y%m%d_%H%M%S)"
+            mv "${HOME}/.ccvm" "$old_backup"
+            
+            success "配置已迁移到 ~/.claude/ccvm"
+            info "旧配置已备份到: $old_backup"
+        fi
+    fi
+    
+    # 备份现有 Claude 配置（如果存在且不是我们创建的）
+    if [ -d "$CLAUDE_DIR" ] && [ ! -f "$CCVM_DIR/.installed_by_ccvm" ]; then
+        local backup_dir="$CCVM_DIR/claude_backup/$(date +%Y%m%d_%H%M%S)"
         
         info "备份现有 Claude 配置..."
         mkdir -p "$backup_dir"
-        cp -r "${HOME}/.claude/"* "$backup_dir/" 2>/dev/null || true
         
-        success "已备份现有配置到: $backup_dir"
-        warn "如需恢复: cp -r $backup_dir/* ~/.claude/"
+        # 只备份非 ccvm 目录的内容
+        for item in "$CLAUDE_DIR"/*; do
+            if [ -e "$item" ] && [ "$(basename "$item")" != "ccvm" ]; then
+                cp -r "$item" "$backup_dir/" 2>/dev/null || true
+            fi
+        done
+        
+        success "已备份现有 Claude 配置到: $backup_dir"
     fi
 }
 
@@ -181,8 +211,12 @@ install_ccvm() {
     fi
     
     # 确保基础目录结构存在
+    mkdir -p "$CLAUDE_DIR"  # 确保 ~/.claude 目录存在
     mkdir -p "$CCVM_DIR/providers"
     mkdir -p "$CCVM_DIR/backups"
+    
+    # 创建安装标记
+    echo "$(date): 由 CCVM 安装脚本创建" > "$CCVM_DIR/.installed_by_ccvm"
     
     if [ "$mode" = "dev" ]; then
         # 开发模式：记录开发路径，不复制代码
@@ -263,10 +297,14 @@ sync_claude_config() {
         info "同步 Claude 配置..."
         
         # 确保目标目录存在
-        mkdir -p "${HOME}/.claude"
+        mkdir -p "$CLAUDE_DIR"
         
-        # 复制配置文件
-        cp -r "$claude_template_dir/"* "${HOME}/.claude/" 2>/dev/null || true
+        # 复制配置文件，避免覆盖 ccvm 目录
+        for item in "$claude_template_dir"/*; do
+            if [ -e "$item" ] && [ "$(basename "$item")" != "ccvm" ]; then
+                cp -r "$item" "$CLAUDE_DIR/" 2>/dev/null || true
+            fi
+        done
         
         success "Claude 配置已同步"
     else
@@ -299,17 +337,12 @@ create_shell_function() {
 # CCVM (Claude Code Version Manager) - Shell 函数
 ccvm() {
     node "$ccvm_bin_path" "\$@"
-    
-    # 如果是 provider CRUD 操作，重新加载 aliases
-    if [[ "\$1" == "provider" && ("\$2" == "add" || "\$2" == "remove" || "\$2" == "edit") ]]; then
-        source ~/.ccvm/aliases.sh 2>/dev/null || true
-    fi
 }
 
-# 加载现有的 provider aliases
-if [ -f ~/.ccvm/aliases.sh ]; then
-    source ~/.ccvm/aliases.sh
-fi
+# Dynamic claude function - delegates to ccvm exec
+claude() {
+    ccvm exec "\$@"
+}
 EOF
     
     # 检查是否已经配置
@@ -342,16 +375,107 @@ EOF
     success "Shell 函数已添加到 $(basename "$shell_config")"
 }
 
-# 安装 Claude Code CLI (如果需要)
+# 安装并更新 Claude CLI 工具
 install_claude_cli() {
     info "检查 Claude Code CLI..."
     
+    # 检查和安装/更新 Claude Code CLI
     if command_exists claude; then
-        success "Claude Code CLI 已安装: $(claude --version 2>/dev/null || echo '版本未知')"
+        local current_version="unknown"
+        if claude --version >/dev/null 2>&1; then
+            current_version=$(claude --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || echo 'unknown')
+        fi
+        info "当前版本: ${current_version}，检查更新..."
+        
+        # 尝试更新到最新版本
+        if npm update -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+            local new_version="unknown"
+            if claude --version >/dev/null 2>&1; then
+                new_version=$(claude --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || echo 'unknown')
+            fi
+            if [ "${current_version}" != "${new_version}" ]; then
+                success "Claude Code CLI 已更新: $current_version → $new_version"
+            else
+                success "Claude Code CLI 已是最新版本: $current_version"
+            fi
+        else
+            warn "检查更新失败，但当前版本可用: $current_version"
+        fi
     else
         info "安装 Claude Code CLI..."
-        npm install -g @anthropic-ai/claude-code || error "Claude Code CLI 安装失败"
-        success "Claude Code CLI 安装成功"
+        if npm install -g @anthropic-ai/claude-code; then
+            success "Claude Code CLI 安装成功: $(claude --version 2>/dev/null || echo '安装完成')"
+        else
+            error "Claude Code CLI 安装失败"
+        fi
+    fi
+    
+    # 检查和安装/更新 ccline（容错处理）
+    info "检查 ccline 工具..."
+    if command_exists ccline; then
+        local current_version="unknown"
+        if ccline --version >/dev/null 2>&1; then
+            current_version=$(ccline --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || echo 'unknown')
+        fi
+        info "当前版本: ${current_version}，检查更新..."
+        
+        # 尝试更新，失败不中断
+        if npm update -g @cometix/ccline >/dev/null 2>&1; then
+            local new_version="unknown"
+            if ccline --version >/dev/null 2>&1; then
+                new_version=$(ccline --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || echo 'unknown')
+            fi
+            if [ "${current_version}" != "${new_version}" ]; then
+                success "ccline 已更新: $current_version → $new_version"
+            else
+                success "ccline 已是最新版本: $current_version"
+            fi
+        else
+            warn "ccline 更新失败，但当前版本可用: $current_version"
+        fi
+    else
+        info "安装 ccline 工具..."
+        if npm install -g @cometix/ccline >/dev/null 2>&1; then
+            success "ccline 安装成功: $(ccline --version 2>/dev/null || echo '安装完成')"
+        else
+            warn "ccline 安装失败，可稍后手动安装: npm install -g @cometix/ccline"
+        fi
+    fi
+    
+    # 创建 ccline 默认配置
+    setup_ccline_defaults
+}
+
+# 设置 ccline 默认配置
+setup_ccline_defaults() {
+    if command_exists ccline; then
+        info "配置 ccline 默认设置..."
+        
+        # 确保 ccline 配置目录存在
+        local ccline_dir="$CLAUDE_DIR/ccline"
+        mkdir -p "$ccline_dir"
+        
+        # 初始化 ccline 配置（如果不存在）
+        if [ ! -f "$ccline_dir/config.toml" ]; then
+            # 运行 ccline 初始化命令
+            if ccline --init >/dev/null 2>&1; then
+                success "ccline 默认配置已创建"
+                
+                # 提供配置提示
+                echo
+                info "ccline 配置提示:"
+                echo "  • 配置文件位置: ~/.claude/ccline/config.toml"
+                echo "  • 运行 'ccline --config' 可以交互式配置"
+                echo "  • 运行 'ccline --check' 检查配置状态"
+                echo "  • 集成到 Claude Code: 修改 ~/.claude/settings.json"
+            else
+                warn "ccline 初始化失败，请稍后手动运行: ccline --init"
+            fi
+        else
+            success "ccline 配置已存在，跳过初始化"
+        fi
+    else
+        info "ccline 未安装，跳过配置"
     fi
 }
 
@@ -379,7 +503,7 @@ setup_first_provider() {
         read -r setup_provider
         
         if [[ "$setup_provider" =~ ^[Nn]$ ]]; then
-            info "跳过初始配置，您稍后可运行 'ccvm provider add' 来添加"
+            info "跳过初始配置，您稍后可运行 'ccvm add' 来添加"
             return 0
         fi
     else
@@ -388,9 +512,9 @@ setup_first_provider() {
         echo
         info "安装完成后，请按以下步骤手动配置："
         echo "1. 重新加载 shell 配置: source ~/.zshrc (或重启终端)"
-        echo "2. 添加 provider: ccvm provider add"
+        echo "2. 添加配置: ccvm add"
         echo "3. 查看状态: ccvm status"
-        echo "4. 开始使用: cc-<your-provider> \"your question\""
+        echo "4. 开始使用: claude \"your question\""
         return 0
     fi
     
@@ -406,8 +530,8 @@ setup_first_provider() {
     info "启动 provider 配置向导..."
     echo
     
-    # 直接调用 ccvm provider add
-    if node "$ccvm_bin_path" provider add; then
+    # 直接调用 ccvm add
+    if node "$ccvm_bin_path" add; then
         success "首个 provider 配置完成！"
         
         # 检查是否成功添加了 provider
@@ -417,15 +541,12 @@ setup_first_provider() {
             local first_provider=$(ls -1 "$CCVM_DIR/providers"/*.json 2>/dev/null | head -1 | xargs basename | sed 's/\.json$//')
             
             # 设置为默认 provider
-            if node "$ccvm_bin_path" provider use "$first_provider" >/dev/null 2>&1; then
+            if node "$ccvm_bin_path" use "$first_provider" >/dev/null 2>&1; then
                 success "已将 '$first_provider' 设置为默认 provider"
-                
-                # 生成 aliases
-                node "$ccvm_bin_path" provider list >/dev/null 2>&1 || true
                 
                 echo
                 echo -e "${GREEN}🎊 恭喜！现在您可以使用以下命令:${NC}"
-                echo "  $first_provider \"Hello Claude!\""
+                echo "  claude \"Hello Claude!\""
                 echo "  ccvm status"
                 echo
             else
@@ -433,7 +554,7 @@ setup_first_provider() {
             fi
         fi
     else
-        warn "provider 配置被取消或失败，您可以稍后运行 'ccvm provider add'"
+        warn "配置被取消或失败，您可以稍后运行 'ccvm add'"
     fi
 }
 
@@ -452,11 +573,12 @@ show_completion_info() {
         echo "  ✅ 开发模式：链接到当前项目目录"
         echo "  ✅ 代码修改实时生效，无需重新安装"
     else
-        echo "  ✅ 生产模式：完整安装到 ~/.ccvm"
+        echo "  ✅ 生产模式：完整安装到 ~/.claude/ccvm"
     fi
     
-    echo "  ✅ Shell 函数已配置 (ccvm 命令)"
+    echo "  ✅ Shell 函数已配置 (ccvm + claude 命令)"
     echo "  ✅ Claude Code CLI 已就绪"
+    echo "  ✅ ccline 工具已安装"
     echo "  ✅ Claude 配置已同步"
     echo
     echo -e "${YELLOW}🔄 重启终端或运行以下命令来启用:${NC}"
@@ -466,30 +588,30 @@ show_completion_info() {
     
     # 检查是否已配置 provider
     if [ -d "$CCVM_DIR/providers" ] && [ "$(ls -A "$CCVM_DIR/providers" 2>/dev/null | grep -c '\.json$')" -gt 0 ]; then
-        # 已配置 provider 的情况
+        # 已配置的情况
         echo "  1️⃣  ccvm status               # 查看当前配置状态"  
-        echo "  2️⃣  ccvm provider list       # 查看所有 providers"
-        echo "  3️⃣  重启终端后使用您的 provider 命令"
+        echo "  2️⃣  ccvm list                # 查看所有配置"
+        echo "  3️⃣  claude \"Hello Claude!\"    # 使用 claude 命令"
         echo "  4️⃣  ccvm --help              # 查看完整帮助"
     else
-        # 未配置 provider 的情况
+        # 未配置的情况
         echo "  1️⃣  ccvm --help               # 查看帮助"
-        echo "  2️⃣  ccvm provider add        # 添加第一个 provider"
-        echo "  3️⃣  cc-xxx \"Hello!\"           # 使用您的 provider"
-        echo "  4️⃣  ccvm provider list       # 查看所有 providers"
+        echo "  2️⃣  ccvm add                 # 添加第一个配置"
+        echo "  3️⃣  claude \"Hello!\"           # 使用 claude 命令"
+        echo "  4️⃣  ccvm list                # 查看所有配置"
     fi
     echo
     
     if [ "$mode" = "dev" ]; then
         echo -e "${BLUE}🔧 开发模式提示:${NC}"
         echo "  • 修改代码后立即生效，无需重新安装"
-        echo "  • 要切换到生产模式：删除 ~/.ccvm 后在其他目录运行安装脚本"
+        echo "  • 要切换到生产模式：删除 ~/.claude/ccvm 后在其他目录运行安装脚本"
         echo
     fi
     
     echo -e "${BLUE}📖 文档和支持:${NC}"
-    echo "  🌐 GitHub: https://github.com/kedoupi/claude-code-kit"
-    echo "  🐛 问题报告: https://github.com/kedoupi/claude-code-kit/issues"
+    echo "  🌐 GitHub: https://github.com/kedoupi/ccvm"
+    echo "  🐛 问题报告: https://github.com/kedoupi/ccvm/issues"
     echo
 }
 
@@ -514,8 +636,9 @@ main() {
     info "欢迎使用 CCVM 安装程序！"
     echo -e "${BLUE}📦 将要安装的内容:${NC}"
     echo "  • CCVM 核心工具"
-    echo "  • Shell 函数包装器"  
+    echo "  • Shell 函数包装器 (ccvm + claude)"  
     echo "  • Claude Code CLI (如果未安装)"
+    echo "  • ccline 工具 (如果未安装)"
     echo "  • 自定义 Claude 配置"
     echo
     
@@ -523,8 +646,8 @@ main() {
     echo -e "${BLUE}步骤 1/7:${NC} 检查系统依赖"
     check_dependencies
     
-    echo -e "${BLUE}步骤 2/7:${NC} 备份现有配置"
-    backup_claude_config
+    echo -e "${BLUE}步骤 2/7:${NC} 迁移和备份配置"
+    migrate_and_backup_config
     
     echo -e "${BLUE}步骤 3/7:${NC} 安装 CCVM 核心"
     install_ccvm
@@ -535,7 +658,7 @@ main() {
     echo -e "${BLUE}步骤 5/7:${NC} 创建 Shell 函数"
     create_shell_function
     
-    echo -e "${BLUE}步骤 6/7:${NC} 安装 Claude Code CLI"
+    echo -e "${BLUE}步骤 6/7:${NC} 安装 Claude CLI 工具"
     install_claude_cli
     
     echo -e "${BLUE}步骤 7/7:${NC} 配置首个 Provider"

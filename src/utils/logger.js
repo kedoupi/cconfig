@@ -14,7 +14,7 @@ class Logger {
     this.level = options.level || process.env.LOG_LEVEL || 'info';
     this.enableConsole = options.enableConsole !== false;
     this.enableFile = options.enableFile || false;
-    this.logFile = options.logFile || path.join(os.homedir(), '.ccvm', 'debug.log');
+    this.logFile = options.logFile || path.join(os.homedir(), '.claude', 'ccvm', 'debug.log');
     this.maxFileSize = options.maxFileSize || 5 * 1024 * 1024; // 5MB
     
     this.levels = {
@@ -77,7 +77,7 @@ class Logger {
    * Write log entry to file if enabled
    */
   async writeToFile(formattedMessage) {
-    if (!this.enableFile) return;
+    if (!this.enableFile) {return;}
 
     try {
       await fs.ensureDir(path.dirname(this.logFile));
@@ -101,7 +101,7 @@ class Logger {
    * Core logging method
    */
   async log(level, message, context = {}) {
-    if (!this.shouldLog(level)) return;
+    if (!this.shouldLog(level)) {return;}
 
     const fileMessage = this.formatMessage(level, message, context);
     const consoleMessage = this.formatConsoleMessage(level, message, context);

@@ -11,7 +11,7 @@ const os = require('os');
 
 class ErrorHandler {
   constructor() {
-    this.logFile = path.join(os.homedir(), '.ccvm', 'error.log');
+    this.logFile = path.join(os.homedir(), '.claude', 'ccvm', 'error.log');
     this.maxLogSize = 10 * 1024 * 1024; // 10MB
     this.maxLogFiles = 3;
   }

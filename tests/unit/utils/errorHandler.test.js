@@ -33,7 +33,7 @@ describe('ErrorHandler', () => {
   describe('constructor', () => {
     it('should initialize with correct default values', () => {
       const handler = new ErrorHandler();
-      expect(handler.logFile).toBe(path.join(os.homedir(), '.ccvm', 'error.log'));
+      expect(handler.logFile).toBe(path.join(os.homedir(), '.claude', 'ccvm', 'error.log'));
       expect(handler.maxLogSize).toBe(10 * 1024 * 1024);
       expect(handler.maxLogFiles).toBe(3);
     });

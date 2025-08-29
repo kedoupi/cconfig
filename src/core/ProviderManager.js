@@ -30,7 +30,7 @@ class ProviderManager {
   /**
    * Add a new provider with enhanced validation and security
    */
-  async addProvider(provider) {
+  async addProvider(provider, options = {}) {
     try {
       await this._acquireLock('add');
       
@@ -66,6 +66,11 @@ class ProviderManager {
       await fs.writeJson(providerFile, providerData, { spaces: 2, mode: 0o600 });
       
       await this._releaseLock();
+
+      // Automatically regenerate and reload aliases after successful addition
+      if (options.autoReload !== false) {
+        await this._triggerAliasReload();
+      }
       
     } catch (error) {
       await this._releaseLock();
@@ -76,7 +81,7 @@ class ProviderManager {
   /**
    * Update an existing provider with enhanced validation
    */
-  async updateProvider(alias, provider) {
+  async updateProvider(alias, provider, options = {}) {
     try {
       await this._acquireLock('update');
       
@@ -105,6 +110,11 @@ class ProviderManager {
       await fs.writeJson(providerFile, updatedProvider, { spaces: 2, mode: 0o600 });
       
       await this._releaseLock();
+
+      // Automatically regenerate and reload aliases after successful update
+      if (options.autoReload !== false) {
+        await this._triggerAliasReload();
+      }
       
     } catch (error) {
       await this._releaseLock();
@@ -115,7 +125,7 @@ class ProviderManager {
   /**
    * Remove a provider
    */
-  async removeProvider(alias) {
+  async removeProvider(alias, options = {}) {
     const providerFile = path.join(this.providersDir, `${alias}.json`);
     
     // Check if provider exists
@@ -125,6 +135,11 @@ class ProviderManager {
 
     // Remove provider file
     await fs.remove(providerFile);
+
+    // Automatically regenerate and reload aliases after successful removal
+    if (options.autoReload !== false) {
+      await this._triggerAliasReload();
+    }
   }
 
   /**
@@ -472,6 +487,25 @@ class ProviderManager {
       version: provider.version,
       id: provider.id
     };
+  }
+
+  /**
+   * Trigger automatic alias regeneration and reload
+   */
+  async _triggerAliasReload() {
+    try {
+      // Import AliasGenerator dynamically to avoid circular dependency
+      const AliasGenerator = require('./AliasGenerator');
+      const aliasGenerator = new AliasGenerator(this.configDir);
+      
+      // Regenerate aliases with auto-reload
+      await aliasGenerator.generateAliases({ autoReload: true });
+      
+    } catch (error) {
+      // Log warning but don't fail the provider operation
+      console.warn(`Warning: Failed to auto-reload aliases: ${error.message}`);
+      console.log('You may need to run "claude-reload" or "source ~/.claude/ccvm/aliases.sh" manually');
+    }
   }
 }
 

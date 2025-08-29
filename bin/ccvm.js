@@ -25,14 +25,14 @@ const BackupManager = require('../src/core/BackupManager');
 const AliasGenerator = require('../src/core/AliasGenerator');
 
 // Configuration
-const CONFIG_DIR = path.join(os.homedir(), '.ccvm');
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
+const CONFIG_DIR = path.join(CLAUDE_DIR, 'ccvm');
 
 // Initialize managers
 const configManager = new ConfigManager(CONFIG_DIR);
 const providerManager = new ProviderManager(CONFIG_DIR);
 const backupManager = new BackupManager(CONFIG_DIR, CLAUDE_DIR);
-const aliasGenerator = new AliasGenerator(CONFIG_DIR);
+// Note: AliasGenerator removed - using direct claude command integration
 
 // Main CLI program
 const program = new Command();
@@ -43,14 +43,10 @@ program
   .version(packageJson.version);
 
 
-// Provider management commands
-const providerCmd = program
-  .command('provider')
-  .description('Manage API providers');
-
-providerCmd
+// Direct commands (simplified)
+program
   .command('add')
-  .description('Add a new API provider')
+  .description('Add a new API configuration')
   .action(async () => {
     try {
       const spinner = ora('Initializing provider setup...').start();
@@ -63,14 +59,11 @@ providerCmd
         {
           type: 'input',
           name: 'aliasInput',
-          message: 'Provider name (will be prefixed with cc-):',
+          message: 'Provider name (alias):',
           validate: (input) => {
             if (!input) {return 'Provider name is required';}
             if (!/^[a-zA-Z0-9-_]+$/.test(input)) {
               return 'Provider name can only contain letters, numbers, hyphens, and underscores';
-            }
-            if (input.startsWith('cc-')) {
-              return 'Do not include cc- prefix, it will be added automatically';
             }
             return true;
           }
@@ -114,17 +107,16 @@ providerCmd
         }
       ]);
 
-      // 添加 cc- 前缀
+      // 使用用户输入的别名（不添加前缀）
       const providerData = {
         ...answers,
-        alias: `cc-${answers.aliasInput}`
+        alias: answers.aliasInput
       };
       delete providerData.aliasInput;
 
       const addSpinner = ora('Adding provider...').start();
       
       await providerManager.addProvider(providerData);
-      await aliasGenerator.generateAliases();
       
       // 检查是否需要设置为默认provider
       const providers = await providerManager.listProviders();
@@ -138,24 +130,24 @@ providerCmd
           lastUpdated: new Date().toISOString()
         }, { spaces: 2 });
         
+        // Provider configuration saved - no aliases needed
+        
         addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully and set as default!`));
       } else {
+        // Provider configuration saved - no aliases needed
         addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully!`));
       }
       
       console.log(chalk.green('\n✅ Provider ready to use!'));
-      console.log(chalk.yellow('\n🔄 For immediate use in current session:'));
-      console.log(chalk.cyan('source ~/.ccvm/aliases.sh'));
+      console.log(chalk.yellow('\n💡 Usage: claude "your message"'));
       
-      console.log(chalk.yellow('\n💡 For persistent setup, add to ~/.zshrc:'));
-      console.log(chalk.dim('source ~/.ccvm/aliases.sh'));
       
       console.log(chalk.yellow('\n🚀 Usage examples:'));
-      console.log(`   ${providerData.alias} "Hello, how are you?"`);
-      console.log(`   ${providerData.alias} "Explain React hooks"`);
+      console.log('   claude "Hello, how are you?"');
+      console.log('   claude "Explain React hooks"');
       
       console.log(chalk.blue('\n📝 Set as default provider:'));
-      console.log(`   ccvm provider use ${providerData.alias}`);
+      console.log(`   ccvm use ${providerData.alias}`);
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error adding provider:'), error.message);
@@ -163,9 +155,9 @@ providerCmd
     }
   });
 
-providerCmd
+program
   .command('show <alias>')
-  .description('Show provider details')
+  .description('Show configuration details')
   .action(async (alias) => {
     try {
       const spinner = ora(`Loading provider '${alias}'...`).start();
@@ -175,7 +167,7 @@ providerCmd
       
       if (!provider) {
         spinner.fail(chalk.red(`Provider '${alias}' not found`));
-        console.log(chalk.blue('\nRun: ccvm provider list'));
+        console.log(chalk.blue('\nRun: ccvm list'));
         return;
       }
 
@@ -192,7 +184,7 @@ providerCmd
       
       console.log(chalk.cyan('\nUsage:'));
       console.log(`  ${provider.alias} "your message"     # Use this provider`);
-      console.log(`  ccvm provider edit ${provider.alias}    # Edit this provider`);
+      console.log(`  ccvm edit ${provider.alias}    # Edit this provider`);
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error showing provider:'), error.message);
@@ -200,9 +192,9 @@ providerCmd
     }
   });
 
-providerCmd
+program
   .command('list')
-  .description('List all configured providers')
+  .description('List all configured API endpoints')
   .action(async () => {
     try {
       const spinner = ora('Loading providers...').start();
@@ -214,7 +206,7 @@ providerCmd
 
       if (providers.length === 0) {
         console.log(chalk.yellow('\n📝 No providers configured yet.'));
-        console.log(chalk.blue('   Run: ccvm provider add'));
+        console.log(chalk.blue('   Run: ccvm add'));
         return;
       }
 
@@ -253,9 +245,9 @@ providerCmd
     }
   });
 
-providerCmd
+program
   .command('edit <alias>')
-  .description('Edit an existing provider')
+  .description('Edit an existing configuration')
   .action(async (alias) => {
     try {
       const spinner = ora(`Loading provider '${alias}'...`).start();
@@ -306,7 +298,7 @@ providerCmd
       }
 
       await providerManager.updateProvider(alias, updatedProvider);
-      await aliasGenerator.generateAliases();
+      // Configuration updated - no aliases needed
       
       // 自动加载更新的环境变量到当前进程
       process.env.ANTHROPIC_BASE_URL = updatedProvider.baseURL;
@@ -314,6 +306,7 @@ providerCmd
       process.env.API_TIMEOUT_MS = updatedProvider.timeout?.toString() || '3000000';
 
       updateSpinner.succeed(chalk.green(`Provider '${alias}' updated successfully!`));
+      
       
       console.log(chalk.green('\n✅ Updated configuration loaded:'));
       console.log(chalk.dim(`   ANTHROPIC_BASE_URL=${updatedProvider.baseURL}`));
@@ -325,9 +318,9 @@ providerCmd
     }
   });
 
-providerCmd
+program
   .command('remove <alias>')
-  .description('Remove a provider')
+  .description('Remove a configuration')
   .action(async (alias) => {
     try {
       const spinner = ora(`Loading provider '${alias}'...`).start();
@@ -359,9 +352,10 @@ providerCmd
       const removeSpinner = ora('Removing provider...').start();
 
       await providerManager.removeProvider(alias);
-      await aliasGenerator.generateAliases();
+      // Configuration updated - no aliases needed
 
       removeSpinner.succeed(chalk.green(`Provider '${alias}' removed successfully!`));
+      
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error removing provider:'), error.message);
@@ -376,9 +370,9 @@ providerCmd
 
 
 
-providerCmd
+program
   .command('use [alias]')
-  .description('Set default provider')
+  .description('Switch to API configuration')
   .action(async (alias) => {
     try {
       await configManager.init();
@@ -414,10 +408,10 @@ providerCmd
         
         if (providers.length === 0) {
           console.log(chalk.yellow('No providers configured yet'));
-          console.log('Usage: ccvm provider add');
+          console.log('Usage: ccvm add');
         } else {
           console.log(chalk.yellow('No default provider set'));
-          console.log('Usage: ccvm provider use <alias>');
+          console.log('Usage: ccvm use <alias>');
           console.log(chalk.dim(`Available providers: ${providers.map(p => p.alias).join(', ')}`));
         }
         return;
@@ -438,6 +432,8 @@ providerCmd
         defaultProvider: alias,
         lastUpdated: new Date().toISOString()
       }, { spaces: 2 });
+      
+      // Default provider updated - claude command will use new default automatically
       
       spinner.succeed(chalk.green(`Default provider set to '${alias}'`));
       
@@ -509,7 +505,7 @@ program
 
       // Directory status
       console.log(chalk.cyan('\nDirectory Status:'));
-      console.log(`  ~/.ccvm: ${await fs.pathExists(CONFIG_DIR) ? '✓' : '✗'}`);
+      console.log(`  ~/.claude/ccvm: ${await fs.pathExists(CONFIG_DIR) ? '✓' : '✗'}`);
       console.log(`  ~/.claude: ${await fs.pathExists(CLAUDE_DIR) ? '✓' : '✗'}`);
       console.log(`  aliases.sh: ${await fs.pathExists(path.join(CONFIG_DIR, 'aliases.sh')) ? '✓' : '✗'}`);
 
@@ -626,23 +622,8 @@ program
           }
         }
 
-        // Validate aliases
-        if (!await aliasGenerator.isUpToDate()) {
-          issues.push('Shell aliases are out of date');
-          if (options.fix) {
-            try {
-              await aliasGenerator.generateAliases();
-              fixes.push('Regenerated shell aliases');
-              console.log('  Aliases: ✅ Updated');
-            } catch (fixError) {
-              issues.push(`Failed to regenerate aliases: ${fixError.message}`);
-            }
-          } else {
-            console.log('  Aliases: ⚠️ Out of date');
-          }
-        } else {
-          console.log('  Aliases: ✅ Up to date');
-        }
+        // Note: Aliases validation removed - using direct claude command integration
+        console.log('  Integration: ✅ Direct claude command (no aliases needed)');
 
         // Validate backups
         const backups = await backupManager.listBackups();
@@ -697,6 +678,74 @@ program
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error during diagnostics:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Exec command - execute claude with current default configuration
+program
+  .command('exec')
+  .description('Execute claude with current default configuration')
+  .allowUnknownOption()
+  .action(async (...args) => {
+    try {
+      // Remove the command object from args
+      const claudeArgs = args.slice(0, -1);
+      
+      const spinner = ora('Loading configuration...').start();
+      
+      // Initialize config manager
+      await configManager.init();
+      
+      // Get current configuration
+      const config = await configManager.getConfig();
+      const defaultProvider = config.defaultProvider;
+      
+      if (!defaultProvider) {
+        spinner.fail(chalk.red('No default provider configured'));
+        console.log(chalk.blue('\\nRun: ccvm add'));
+        console.log(chalk.blue('Then: ccvm use <alias>'));
+        process.exit(1);
+      }
+      
+      // Load provider configuration
+      const provider = await providerManager.getProvider(defaultProvider);
+      if (!provider) {
+        spinner.fail(chalk.red(`Provider '${defaultProvider}' not found`));
+        console.log(chalk.blue('\\nRun: ccvm list'));
+        process.exit(1);
+      }
+      
+      spinner.stop();
+      
+      // Set environment variables
+      process.env.ANTHROPIC_AUTH_TOKEN = provider.apiKey;
+      process.env.ANTHROPIC_BASE_URL = provider.baseURL;
+      process.env.API_TIMEOUT_MS = provider.timeout || '3000000';
+      
+      // Execute claude command
+      const { spawn } = require('child_process');
+      const claude = spawn('claude', claudeArgs, {
+        stdio: 'inherit',
+        env: process.env
+      });
+      
+      claude.on('exit', (code) => {
+        process.exit(code || 0);
+      });
+      
+      claude.on('error', (error) => {
+        if (error.code === 'ENOENT') {
+          console.error(chalk.red('\\n❌ Claude CLI not found'));
+          console.error(chalk.blue('Install with: npm install -g @anthropic-ai/claude-code'));
+        } else {
+          console.error(chalk.red('\\n❌ Error executing claude:'), error.message);
+        }
+        process.exit(1);
+      });
+      
+    } catch (error) {
+      console.error(chalk.red('\\n❌ Error:'), error.message);
       process.exit(1);
     }
   });

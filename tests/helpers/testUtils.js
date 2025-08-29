@@ -41,7 +41,7 @@ class TestUtils {
    */
   async createTestEnvironment(prefix = 'test-env') {
     const tempDir = await this.createTempDir(prefix);
-    const configDir = path.join(tempDir, '.ccvm');
+    const configDir = path.join(tempDir, '.claude', 'ccvm');
     const claudeDir = path.join(tempDir, '.claude');
     
     const config = await this.createTestConfigStructure(configDir);

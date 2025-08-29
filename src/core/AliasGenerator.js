@@ -26,7 +26,7 @@ class AliasGenerator {
   /**
    * Generate aliases for all configured providers with enhanced security
    */
-  async generateAliases() {
+  async generateAliases(options = {}) {
     try {
       await this._acquireLock('generate');
       
@@ -47,6 +47,11 @@ class AliasGenerator {
       await this._verifyAliasesFile();
       
       await this._releaseLock();
+
+      // Automatically trigger shell reload if requested
+      if (options.autoReload !== false) {
+        await this.triggerShellReload();
+      }
       
     } catch (error) {
       await this._releaseLock();
@@ -137,7 +142,7 @@ _cc_load_config() {
     
     if [ ! -f "$config_file" ]; then
         echo "Error: Provider configuration not found: $config_file" >&2
-        echo "Run 'ccvm provider list' to see available providers" >&2
+        echo "Run 'ccvm list' to see available providers" >&2
         return 1
     fi
     
@@ -166,7 +171,7 @@ _cc_load_config() {
     
     if ! echo "$json_content" | jq . >/dev/null 2>&1; then
         echo "Error: Invalid JSON in configuration file: $config_file" >&2
-        echo "Run 'ccvm provider edit $provider_alias' to fix the configuration" >&2
+        echo "Run 'ccvm edit $provider_alias' to fix the configuration" >&2
         return 1
     fi
     
@@ -178,13 +183,13 @@ _cc_load_config() {
     # Validate required fields
     if [ -z "$api_key" ] || [ "$api_key" = "null" ]; then
         echo "Error: Invalid or missing API key in $config_file" >&2
-        echo "Run 'ccvm provider edit $provider_alias' to set the API key" >&2
+        echo "Run 'ccvm edit $provider_alias' to set the API key" >&2
         return 1
     fi
     
     if [ -z "$base_url" ] || [ "$base_url" = "null" ]; then
         echo "Error: Invalid or missing base URL in $config_file" >&2
-        echo "Run 'ccvm provider edit $provider_alias' to set the base URL" >&2
+        echo "Run 'ccvm edit $provider_alias' to set the base URL" >&2
         return 1
     fi
     
@@ -205,7 +210,7 @@ _cc_load_config() {
     
     # Update last used timestamp (optional, silent fail)
     if command -v ccvm >/dev/null 2>&1; then
-        ccvm provider --update-last-used "$provider_alias" 2>/dev/null || true
+        # Last used tracking removed in simplified version
     fi
     
     return 0
@@ -234,10 +239,66 @@ _cc_check_claude_cli() {
 }
 
 
+# Function to check if aliases need auto-reload
+_cc_check_auto_reload() {
+    local aliases_file="$HOME/.claude/ccvm/aliases.sh"
+    local providers_dir="$HOME/.claude/ccvm/providers"
+    
+    # Skip check if no aliases file exists
+    if [ ! -f "$aliases_file" ]; then
+        return 1
+    fi
+    
+    # Skip check if no providers directory exists
+    if [ ! -d "$providers_dir" ]; then
+        return 1
+    fi
+    
+    # Get aliases file timestamp
+    local aliases_time=$(stat -c %Y "$aliases_file" 2>/dev/null || stat -f %m "$aliases_file" 2>/dev/null)
+    
+    # Check if any provider file is newer than aliases file
+    for provider_file in "$providers_dir"/*.json; do
+        if [ -f "$provider_file" ]; then
+            local provider_time=$(stat -c %Y "$provider_file" 2>/dev/null || stat -f %m "$provider_file" 2>/dev/null)
+            if [ "$provider_time" -gt "$aliases_time" ]; then
+                return 0  # Need reload
+            fi
+        fi
+    done
+    
+    return 1  # No reload needed
+}
+
+# Function to perform auto-reload of aliases
+_cc_auto_reload() {
+    # Check if ccvm command is available
+    if ! command -v ccvm >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    # Silently regenerate aliases
+    if ccvm doctor --fix >/dev/null 2>&1; then
+        # Re-source the updated aliases file
+        if [ -f "$HOME/.claude/ccvm/aliases.sh" ]; then
+            source "$HOME/.claude/ccvm/aliases.sh"
+            echo "✅ Configuration automatically updated" >&2
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
 # Function to safely execute claude with error handling
 _cc_claude_exec() {
     local provider_alias="$1"
     shift
+    
+    # Auto-reload check: if configuration is outdated, reload it
+    if _cc_check_auto_reload; then
+        _cc_auto_reload
+    fi
     
     # Check prerequisites
     if ! _cc_check_claude_cli; then
@@ -248,7 +309,7 @@ _cc_claude_exec() {
     unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL API_TIMEOUT_MS
     
     # Load provider configuration
-    local config_file="\${CC_PROVIDERS_DIR:-$HOME/.ccvm/providers}/$provider_alias.json"
+    local config_file="\${CC_PROVIDERS_DIR:-$HOME/.claude/ccvm/providers}/$provider_alias.json"
     if ! _cc_load_config "$config_file" "$provider_alias"; then
         return 1
     fi
@@ -263,25 +324,64 @@ _cc_claude_exec() {
     fi
     
     return 0
+}
+
+# Dynamic claude function - reads current default provider from config
+_cc_claude_exec_dynamic() {
+    # Check prerequisites
+    if ! _cc_check_claude_cli; then
+        return 1
+    fi
+    
+    # Read current default provider from config
+    local config_file="\${CC_CONFIG_DIR:-$HOME/.claude/ccvm}/config.json"
+    local default_provider=""
+    
+    if [ ! -f "$config_file" ]; then
+        echo "Error: CCVM not configured" >&2
+        echo "Run 'ccvm add' to add your first provider" >&2
+        return 1
+    fi
+    
+    # Extract default provider using jq
+    if command -v jq >/dev/null 2>&1; then
+        default_provider=$(jq -r '.defaultProvider // empty' "$config_file" 2>/dev/null)
+    else
+        echo "Error: jq is required but not installed" >&2
+        echo "Install with: brew install jq" >&2
+        return 1
+    fi
+    
+    # Check if default provider is set
+    if [ -z "$default_provider" ] || [ "$default_provider" = "null" ]; then
+        echo "Error: No default provider configured" >&2
+        echo "Run 'ccvm use <alias>' to set a default provider" >&2
+        echo "Available providers:" >&2
+        ccvm list 2>/dev/null || echo "  (run 'ccvm add' to add one)" >&2
+        return 1
+    fi
+    
+    # Use the existing _cc_claude_exec function with the default provider
+    _cc_claude_exec "$default_provider" "$@"
 }`;
   }
 
   /**
-   * Generate aliases for providers (internal method)
+   * Generate aliases for providers (simplified - no individual aliases)
    */
   generateProviderAliases(providers) {
     if (providers.length === 0) {
       return `# No providers configured yet
-# Run 'cc-config provider add' to add your first provider`;
+# Run 'ccvm add' to add your first provider`;
     }
 
-    const aliases = providers.map(provider => {
-      return `# Provider: ${provider.alias} (${provider.baseURL})
-alias ${provider.alias}='_cc_claude_exec "${provider.alias}"'`;
-    }).join('\n\n');
+    // List configured providers for reference only (no aliases)
+    const providerList = providers.map(provider => 
+      `#   ${provider.alias}: ${provider.baseURL}`
+    ).join('\n');
 
-    return `# Provider aliases
-${aliases}`;
+    return `# Configured providers (use 'ccvm use <alias>' to switch):
+${providerList}`;
   }
 
   /**
@@ -292,62 +392,30 @@ ${aliases}`;
    */
   async generateDefaultClaudeAlias() {
     try {
-      // Read default provider from config
-      const configFile = path.join(this.configDir, 'config.json');
-      let defaultProvider = null;
-      
-      if (await fs.pathExists(configFile)) {
-        const config = await fs.readJson(configFile);
-        defaultProvider = config.defaultProvider;
-      }
-      
-      if (!defaultProvider) {
-        return '# No default provider set - use "ccvm provider use <alias>" to set one';
-      }
-      
-      return `# Default claude command (uses ${defaultProvider} provider)
-alias claude='_cc_claude_exec "${defaultProvider}"'`;
-      
+      return `# Dynamic claude command (automatically uses current default provider)
+alias claude='_cc_claude_exec_dynamic'`;
     } catch (error) {
       return '# Error generating default claude alias';
     }
   }
 
   generateFooter(providers) {
-    const providerList = providers.map(p => `#   ${p.alias}: ${p.baseURL}`).join('\n');
     const providerCount = providers.length;
 
-    return `# Claude Code Kit Statistics
+    return `# Claude Code Kit - Simplified Configuration
 # Total providers configured: ${providerCount}
-# Providers:
-${providerList || '#   (none configured)'}
 #
-# Available commands:
-${providers.map(p => `#   ${p.alias} "your message"     # Use ${p.alias} provider`).join('\n')}
+# Usage:
+#   claude "your message"              # Uses current default provider
 #
 # Management commands:
-#   ccvm provider list     # List all providers
-#   ccvm provider show <alias>  # Show provider details
-#   ccvm provider add      # Add a new provider
-#   ccvm status           # Show system status
+#   ccvm list                          # List all providers
+#   ccvm use <alias>                   # Switch default provider  
+#   ccvm add                           # Add a new provider
+#   ccvm status                        # Show system status
 #
-# For more information: https://github.com/kedoupi/claude-code-kit
-
-# Function to list all available Claude providers
-claude-providers() {
-    echo "Claude Code Kit - Available Providers:"
-    echo "======================================"
-    ${providers.map(p => `echo "  ${p.alias}: ${p.baseURL}"`).join('\n    ')}
-    echo ""
-    echo "Usage: <provider-name> \\"your message\\""
-    echo "Example: ${providers[0]?.alias || 'claude'} \\"Hello, how are you?\\""
-}
-
-# Function to reload aliases after configuration changes
-claude-reload() {
-    source "$HOME/.ccvm/aliases.sh"
-    echo "Claude Code Kit aliases reloaded"
-}`;
+# ✨ No manual reload needed - changes take effect immediately!
+# For more information: https://github.com/kedoupi/claude-code-kit`;
   }
 
   /**
@@ -648,6 +716,47 @@ claude-reload() {
     } catch {
       return 0;
     }
+  }
+
+  /**
+   * Automatically trigger shell reload of aliases
+   */
+  async triggerShellReload() {
+    try {
+      // Create a signal file that the shell wrapper can detect
+      const reloadSignalFile = path.join(this.configDir, '.reload-aliases');
+      await fs.writeFile(reloadSignalFile, Date.now().toString());
+      
+      console.log('✅ Aliases updated - reload signal created');
+      return { success: true, method: 'signal-file' };
+    } catch (error) {
+      console.warn(`Warning: Could not create reload signal: ${error.message}`);
+      return { success: false, reason: error.message };
+    }
+  }
+
+
+  /**
+   * Create a shell integration hint file for better reload support
+   */
+  async createShellIntegrationHint() {
+    const hintFile = path.join(this.configDir, '.shell-integration');
+    const hintContent = {
+      instructions: {
+        zsh: 'Add to ~/.zshrc: source ~/.claude/ccvm/aliases.sh',
+        bash: 'Add to ~/.bashrc: source ~/.claude/ccvm/aliases.sh', 
+        fish: 'Add to ~/.config/fish/config.fish: source ~/.claude/ccvm/aliases.sh'
+      },
+      autoReload: {
+        command: 'claude-reload',
+        description: 'Reload aliases in current session'
+      },
+      created: new Date().toISOString(),
+      version: this.version
+    };
+
+    await fs.writeJson(hintFile, hintContent, { spaces: 2 });
+    return hintFile;
   }
 }
 

@@ -31,7 +31,7 @@ describe('ConfigManager', () => {
 
     it('should use default paths when no configDir provided', () => {
       const defaultManager = new ConfigManager();
-      expect(defaultManager.getConfigDir()).toContain('.ccvm');
+      expect(defaultManager.getConfigDir()).toContain('.claude');
     });
   });
 
