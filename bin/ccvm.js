@@ -745,7 +745,12 @@ program
   .action(async (...args) => {
     try {
       // Remove the command object from args
-      const claudeArgs = args.slice(0, -1);
+      const rawArgs = args.slice(0, -1);
+      
+      // Convert --pp to --dangerously-skip-permissions
+      const claudeArgs = rawArgs.map(arg => 
+        arg === '--pp' ? '--dangerously-skip-permissions' : arg
+      );
       
       const spinner = ora('Loading configuration...').start();
       

@@ -349,8 +349,18 @@ claude() {
         return 1
     fi
     
-    # Call the native claude command
-    command claude "\$@"
+    # Convert --pp to --dangerously-skip-permissions
+    local args=()
+    for arg in "\$@"; do
+        if [ "\$arg" = "--pp" ]; then
+            args+=("--dangerously-skip-permissions")
+        else
+            args+=("\$arg")
+        fi
+    done
+    
+    # Call the native claude command with converted arguments
+    command claude "\${args[@]}"
 }
 EOF
     
@@ -490,9 +500,44 @@ setup_ccline_defaults() {
 
 # 引导配置第一个 Provider
 setup_first_provider() {
-    # 检查是否已有 provider 配置
-    if [ -d "$CCVM_DIR/providers" ] && [ "$(ls -A "$CCVM_DIR/providers" 2>/dev/null | grep -c '\.json$')" -gt 0 ]; then
-        info "检测到现有 provider 配置，跳过初始配置向导"
+    # 多重检查是否已有有效的 provider 配置
+    local has_providers=false
+    local provider_count=0
+    local config_has_default=false
+    
+    # 1. 检查 providers 目录中的 JSON 文件
+    if [ -d "$CCVM_DIR/providers" ]; then
+        # 计算有效的 provider 文件（非空的 JSON 文件）
+        for provider_file in "$CCVM_DIR/providers"/*.json; do
+            # 跳过不存在的文件（glob 未匹配到任何文件时）
+            [ ! -f "$provider_file" ] && continue
+            if [ -f "$provider_file" ] && [ -s "$provider_file" ]; then
+                # 尝试验证 JSON 格式（简单检查）
+                if grep -q '"alias"' "$provider_file" 2>/dev/null; then
+                    provider_count=$((provider_count + 1))
+                    has_providers=true
+                fi
+            fi
+        done
+    fi
+    
+    # 2. 检查 config.json 中是否有 defaultProvider 配置
+    if [ -f "$CCVM_DIR/config.json" ]; then
+        if grep -q '"defaultProvider"' "$CCVM_DIR/config.json" 2>/dev/null; then
+            local default_provider=$(grep '"defaultProvider"' "$CCVM_DIR/config.json" | sed 's/.*"defaultProvider".*:.*"\([^"]*\)".*/\1/')
+            if [ -n "$default_provider" ] && [ "$default_provider" != "null" ]; then
+                config_has_default=true
+            fi
+        fi
+    fi
+    
+    # 如果任一条件满足，跳过初始配置
+    if [ "$has_providers" = true ] || [ "$config_has_default" = true ]; then
+        if [ "$provider_count" -gt 0 ]; then
+            info "检测到现有 $provider_count 个 provider 配置，跳过初始配置向导"
+        else
+            info "检测到现有配置，跳过初始配置向导"
+        fi
         return 0
     fi
     
