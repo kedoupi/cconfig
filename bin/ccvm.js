@@ -24,6 +24,9 @@ const ProviderManager = require('../src/core/ProviderManager');
 const BackupManager = require('../src/core/BackupManager');
 const AliasGenerator = require('../src/core/AliasGenerator');
 
+// Import utilities
+const { displayBanner, displayBannerWithInfo, displayWelcome, displaySuccessBanner, displayErrorBanner } = require('../src/utils/banner');
+
 // Configuration
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const CONFIG_DIR = path.join(CLAUDE_DIR, 'ccvm');
@@ -138,7 +141,7 @@ program
         addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully!`));
       }
       
-      console.log(chalk.green('\n✅ Provider ready to use!'));
+      displaySuccessBanner('Provider ready to use!');
       console.log(chalk.yellow('\n💡 Usage: claude "your message"'));
       
       
@@ -150,7 +153,8 @@ program
       console.log(`   ccvm use ${providerData.alias}`);
 
     } catch (error) {
-      console.error(chalk.red('\n❌ Error adding provider:'), error.message);
+      displayErrorBanner('Error adding provider');
+      console.error(error.message);
       process.exit(1);
     }
   });
@@ -467,7 +471,9 @@ program
       
       spinner.stop();
 
-      console.log(chalk.blue('\n📊 CCVM (Claude Code Version Manager) Status\n'));
+      // Display banner for status command
+      displayBanner();
+      console.log();
 
       // Installation mode detection
       const devPathFile = path.join(CONFIG_DIR, 'dev_path');
@@ -544,6 +550,8 @@ program
   .option('--fix', 'Attempt to fix found issues automatically')
   .action(async (options) => {
     try {
+      // Display banner for doctor command
+      displayBanner();
       console.log(chalk.blue('\n🩺 Claude Code Kit System Diagnostics\n'));
 
       // Check Node.js version
@@ -837,10 +845,11 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-// Run the CLI
-program.parse(process.argv);
-
 // Show help if no command provided
 if (!process.argv.slice(2).length) {
+  displayBannerWithInfo();
   program.outputHelp();
+} else {
+  // Run the CLI
+  program.parse(process.argv);
 }
