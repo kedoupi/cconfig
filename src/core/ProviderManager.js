@@ -8,6 +8,8 @@
 const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
+const Logger = require('../utils/Logger');
+const FileUtils = require('../utils/FileUtils');
 
 class ProviderManager {
   constructor(configDir) {
@@ -46,7 +48,7 @@ class ProviderManager {
       const providerFile = path.join(this.providersDir, `${provider.alias}.json`);
       
       // Check if provider already exists
-      if (await fs.pathExists(providerFile)) {
+      if (await this.providerExists(provider.alias)) {
         throw new Error(`Provider '${provider.alias}' already exists`);
       }
 
@@ -62,8 +64,8 @@ class ProviderManager {
       // Ensure providers directory exists
       await fs.ensureDir(this.providersDir);
 
-      // Save provider configuration with proper permissions
-      await fs.writeJson(providerFile, providerData, { spaces: 2, mode: 0o600 });
+      // Save provider configuration with proper permissions (atomic write)
+      await FileUtils.writeJsonAtomic(providerFile, providerData, { mode: 0o600 });
       
       await this._releaseLock();
 
@@ -106,8 +108,8 @@ class ProviderManager {
         version: '2.0.0'
       };
 
-      // Save updated provider configuration with proper permissions
-      await fs.writeJson(providerFile, updatedProvider, { spaces: 2, mode: 0o600 });
+      // Save updated provider configuration with proper permissions (atomic write)
+      await FileUtils.writeJsonAtomic(providerFile, updatedProvider, { mode: 0o600 });
       
       await this._releaseLock();
 
@@ -133,8 +135,8 @@ class ProviderManager {
       throw new Error(`Provider '${alias}' not found`);
     }
 
-    // Remove provider file
-    await fs.remove(providerFile);
+    // Remove provider file safely
+    await FileUtils.safeRemove(providerFile);
 
     // Automatically regenerate and reload aliases after successful removal
     if (options.autoReload !== false) {
@@ -152,11 +154,7 @@ class ProviderManager {
       return null;
     }
 
-    try {
-      return await fs.readJson(providerFile);
-    } catch (error) {
-      throw new Error(`Failed to read provider '${alias}': ${error.message}`);
-    }
+    return await FileUtils.readJsonSafe(providerFile, null);
   }
 
   /**
@@ -176,7 +174,7 @@ class ProviderManager {
           const provider = await fs.readJson(path.join(this.providersDir, file));
           providers.push(provider);
         } catch (error) {
-          console.warn(`Warning: Failed to read provider file ${file}: ${error.message}`);
+          Logger.warn(`Failed to read provider file ${file}`, { error: error.message });
         }
       }
     }
@@ -367,12 +365,12 @@ class ProviderManager {
         
         // If lock is older than 2 minutes, consider it stale
         if (lockAge > 2 * 60 * 1000) {
-          await fs.remove(this.lockFile);
+          await FileUtils.safeRemove(this.lockFile);
         } else {
           throw new Error(`Provider operation locked by ${lock.operation} since ${lock.created}`);
         }
       } catch (parseError) {
-        await fs.remove(this.lockFile);
+        await FileUtils.safeRemove(this.lockFile);
       }
     }
 
@@ -389,9 +387,7 @@ class ProviderManager {
    * Release lock for provider operations
    */
   async _releaseLock() {
-    if (await fs.pathExists(this.lockFile)) {
-      await fs.remove(this.lockFile);
-    }
+    await FileUtils.safeRemove(this.lockFile);
   }
 
   /**
@@ -424,7 +420,7 @@ class ProviderManager {
     const weakPatterns = ['test', '123', 'demo', 'example'];
     for (const pattern of weakPatterns) {
       if (provider.apiKey.toLowerCase().includes(pattern)) {
-        console.warn('Warning: API key appears to contain test/demo patterns');
+        Logger.warn('API key appears to contain test/demo patterns', { pattern });
         break;
       }
     }
@@ -436,7 +432,7 @@ class ProviderManager {
     const isTestingEnv = process.env.NODE_ENV === 'test' || process.env.CC_ALLOW_HTTP === 'true';
     
     if (url.protocol !== 'https:' && !isLocalhost && !isPrivateNetwork && !isTestingEnv) {
-      console.warn(`Warning: Using HTTP for ${url.hostname}. For production, use HTTPS or set CC_ALLOW_HTTP=true`);
+      Logger.warn(`Using HTTP for ${url.hostname}. For production, use HTTPS or set CC_ALLOW_HTTP=true`);
       // For testing purposes, allow HTTP but warn
     }
   }
@@ -462,11 +458,11 @@ class ProviderManager {
       if (provider) {
         provider.lastUsed = new Date().toISOString();
         const providerFile = path.join(this.providersDir, `${alias}.json`);
-        await fs.writeJson(providerFile, provider, { spaces: 2, mode: 0o600 });
+        await FileUtils.writeJsonAtomic(providerFile, provider, { mode: 0o600 });
       }
     } catch (error) {
       // Silent fail for this non-critical operation
-      console.debug(`Failed to update last used for provider ${alias}: ${error.message}`);
+      Logger.debug(`Failed to update last used for provider ${alias}`, { error: error.message });
     }
   }
 
@@ -503,8 +499,8 @@ class ProviderManager {
       
     } catch (error) {
       // Log warning but don't fail the provider operation
-      console.warn(`Warning: Failed to auto-reload aliases: ${error.message}`);
-      console.log('You may need to run "claude-reload" or "source ~/.claude/ccvm/aliases.sh" manually');
+      Logger.warn('Failed to auto-reload aliases', { error: error.message });
+      Logger.info('You may need to run "claude-reload" or "source ~/.claude/ccvm/aliases.sh" manually');
     }
   }
 }

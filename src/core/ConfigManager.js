@@ -8,7 +8,8 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
-const { warn, debug } = require('../utils/logger');
+const Logger = require('../utils/Logger');
+const FileUtils = require('../utils/FileUtils');
 
 class ConfigManager {
   constructor(configDir = path.join(os.homedir(), '.claude', 'ccvm')) {
@@ -35,35 +36,59 @@ class ConfigManager {
    */
   async init() {
     try {
-      // Check for existing lock
-      await this._checkLock();
-      
-      // Create lock
-      await this._createLock();
-      
-      // Ensure directories exist
-      await this.ensureDirectories();
-      
-      // Ensure required files exist
-      await this.ensureFiles();
-      
-      // Validate configuration integrity
-      const validation = await this.validateConfiguration();
-      if (!validation.valid) {
-        await warn('Configuration validation issues found', { issues: validation.issues });
-        await this._attemptAutoRepair(validation.issues);
-      }
-      
-      // Update configuration
-      await this._updateConfig({ initialized: true, lastUpdated: new Date().toISOString() });
-      
-      // Release lock
-      await this._releaseLock();
-      
+      await this._acquireInitLock();
+      await this._performInitialization();
     } catch (error) {
-      await this._releaseLock();
       throw new Error(`Configuration initialization failed: ${error.message}`);
+    } finally {
+      await this._releaseLock();
     }
+  }
+
+  /**
+   * Perform the actual initialization steps
+   */
+  async _performInitialization() {
+    await this._setupEnvironment();
+    await this._validateAndRepair();
+    await this._updateInitStatus();
+  }
+
+  /**
+   * Setup the environment (directories and files)
+   */
+  async _setupEnvironment() {
+    await this.ensureDirectories();
+    await this.ensureFiles();
+  }
+
+  /**
+   * Validate configuration and attempt repairs if needed
+   */
+  async _validateAndRepair() {
+    const validation = await this.validateConfiguration();
+    if (!validation.valid) {
+      Logger.warn('Configuration validation issues found', { issues: validation.issues });
+      await this._attemptAutoRepair(validation.issues);
+    }
+  }
+
+  /**
+   * Update initialization status
+   */
+  async _updateInitStatus() {
+    await this._updateConfig({ 
+      initialized: true, 
+      lastUpdated: new Date().toISOString() 
+    });
+  }
+
+  /**
+   * Acquire initialization lock
+   */
+  async _acquireInitLock() {
+    await this._checkLock();
+    await this._createLock();
   }
   
   /**
@@ -81,14 +106,14 @@ class ConfigManager {
         
         // If lock is older than 5 minutes, consider it stale
         if (lockAge > 5 * 60 * 1000) {
-          await warn('Removing stale lock file', { lockFile: this.lockFile });
-          await fs.remove(this.lockFile);
+          Logger.warn('Removing stale lock file', { lockFile: this.lockFile });
+          await FileUtils.safeRemove(this.lockFile);
         } else {
           throw new Error(`Configuration is locked by process ${lock.pid} since ${lock.created}`);
         }
       } catch (parseError) {
         // Invalid lock file, remove it
-        await fs.remove(this.lockFile);
+        await FileUtils.safeRemove(this.lockFile);
       }
     }
   }
@@ -109,9 +134,7 @@ class ConfigManager {
    * Release lock file
    */
   async _releaseLock() {
-    if (await fs.pathExists(this.lockFile)) {
-      await fs.remove(this.lockFile);
-    }
+    await FileUtils.safeRemove(this.lockFile);
   }
 
   /**
@@ -128,19 +151,23 @@ class ConfigManager {
       { path: path.join(this.claudeDir, 'output-styles'), description: 'Output styles directory' }
     ];
 
-    for (const { path: dirPath, description } of directories) {
+    await Promise.all(directories.map(async ({ path: dirPath, description }) => {
       try {
-        await fs.ensureDir(dirPath);
-        
-        // Verify directory is writable
-        const testFile = path.join(dirPath, '.write-test');
-        await fs.writeFile(testFile, 'test');
-        await fs.remove(testFile);
-        
+        await FileUtils.ensureDir(dirPath);
+        await this._verifyWritable(dirPath);
       } catch (error) {
         throw new Error(`Failed to create or write to ${description} (${dirPath}): ${error.message}`);
       }
-    }
+    }));
+  }
+
+  /**
+   * Verify directory is writable
+   */
+  async _verifyWritable(dirPath) {
+    const testFile = path.join(dirPath, '.write-test');
+    await fs.writeFile(testFile, 'test');
+    await FileUtils.safeRemove(testFile);
   }
 
   /**
@@ -169,7 +196,7 @@ class ConfigManager {
               await fs.writeJson(filePath, { ...content, ...existing }, { spaces: 2 });
             }
           } catch (parseError) {
-            await warn('Recreating corrupted file', { file: filePath, description });
+            Logger.warn('Recreating corrupted file', { file: filePath, description });
             await fs.writeJson(filePath, content, { spaces: 2 });
           }
         }
@@ -316,13 +343,8 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
       this.claudeDir
     ];
 
-    for (const path of requiredPaths) {
-      if (!await fs.pathExists(path)) {
-        return false;
-      }
-    }
-
-    return true;
+    const results = await FileUtils.batchPathExists(requiredPaths);
+    return results.every(r => r.exists);
   }
 
   /**
@@ -353,22 +375,24 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
       { path: this.claudeDir, name: 'Claude directory' }
     ];
 
-    for (const { path: dirPath, name } of requiredDirs) {
-      if (!await fs.pathExists(dirPath)) {
-        issues.push(`${name} missing: ${dirPath}`);
+    const dirResults = await FileUtils.batchPathExists(requiredDirs.map(d => d.path));
+    dirResults.forEach((result, index) => {
+      if (!result.exists) {
+        issues.push(`${requiredDirs[index].name} missing: ${result.path}`);
       }
-    }
+    });
 
     // Check if required files exist
     const requiredFiles = [
       { path: this.aliasesFile, name: 'Aliases file' }
     ];
 
-    for (const { path: filePath, name } of requiredFiles) {
-      if (!await fs.pathExists(filePath)) {
-        issues.push(`${name} missing: ${filePath}`);
+    const fileResults = await FileUtils.batchPathExists(requiredFiles.map(f => f.path));
+    fileResults.forEach((result, index) => {
+      if (!result.exists) {
+        issues.push(`${requiredFiles[index].name} missing: ${result.path}`);
       }
-    }
+    });
 
     return {
       valid: issues.length === 0,
@@ -381,15 +405,9 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
    */
   async _updateConfig(updates) {
     try {
-      let config = this.defaultConfig;
-      
-      if (await fs.pathExists(this.configFile)) {
-        config = await fs.readJson(this.configFile);
-      }
-      
+      const config = await FileUtils.readJsonSafe(this.configFile, this.defaultConfig);
       const updatedConfig = { ...config, ...updates, lastUpdated: new Date().toISOString() };
-      await fs.writeJson(this.configFile, updatedConfig, { spaces: 2 });
-      
+      await FileUtils.writeJsonAtomic(this.configFile, updatedConfig);
     } catch (error) {
       throw new Error(`Failed to update configuration: ${error.message}`);
     }
@@ -409,7 +427,7 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
           }
         }
       } catch (repairError) {
-        await warn('Failed to auto-repair issue', { issue, error: repairError.message });
+        Logger.warn('Failed to auto-repair issue', { issue, error: repairError.message });
       }
     }
   }
@@ -418,10 +436,7 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
    * Get current configuration
    */
   async getConfig() {
-    if (await fs.pathExists(this.configFile)) {
-      return await fs.readJson(this.configFile);
-    }
-    return this.defaultConfig;
+    return await FileUtils.readJsonSafe(this.configFile, this.defaultConfig);
   }
 
   /**
@@ -438,8 +453,8 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
       await backupManager.createBackup('Pre-reset backup');
 
       // Remove and recreate directories
-      await fs.remove(this.configDir);
-      await fs.remove(this.claudeDir);
+      await FileUtils.safeRemove(this.configDir);
+      await FileUtils.safeRemove(this.claudeDir);
 
       // Reinitialize
       await this.init();

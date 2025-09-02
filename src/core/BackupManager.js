@@ -8,6 +8,8 @@
 const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
+const Logger = require('../utils/Logger');
+const FileUtils = require('../utils/FileUtils');
 
 class BackupManager {
   constructor(configDir, claudeDir) {
@@ -26,7 +28,7 @@ class BackupManager {
       this.zlib = require('zlib');
       this.compressionEnabled = true;
     } catch (error) {
-      console.debug('Compression not available, using uncompressed backups');
+      Logger.debug('Compression not available, using uncompressed backups');
     }
   }
 
@@ -60,7 +62,7 @@ class BackupManager {
 
       // Backup Claude configuration directory
       if (await fs.pathExists(this.claudeDir)) {
-        await fs.copy(this.claudeDir, path.join(backupDir, 'claude'));
+        await FileUtils.copy(this.claudeDir, path.join(backupDir, 'claude'));
         backupContents.claude = true;
         totalFiles += await this._countFiles(path.join(backupDir, 'claude'));
       } else {
@@ -70,7 +72,7 @@ class BackupManager {
       // Backup provider configurations
       const providersDir = path.join(this.configDir, 'providers');
       if (await fs.pathExists(providersDir)) {
-        await fs.copy(providersDir, path.join(backupDir, 'providers'));
+        await FileUtils.copy(providersDir, path.join(backupDir, 'providers'));
         backupContents.providers = true;
         totalFiles += await this._countFiles(path.join(backupDir, 'providers'));
       } else {
@@ -80,7 +82,7 @@ class BackupManager {
       // Backup main config file if it exists
       const configFile = path.join(this.configDir, 'config.json');
       if (await fs.pathExists(configFile)) {
-        await fs.copy(configFile, path.join(backupDir, 'config.json'));
+        await FileUtils.copy(configFile, path.join(backupDir, 'config.json'));
         backupContents.config = true;
         totalFiles++;
       }
@@ -115,8 +117,7 @@ class BackupManager {
 
       // Write metadata with secure permissions
       const metadataFile = path.join(backupDir, 'metadata.json');
-      await fs.writeJson(metadataFile, metadata, { spaces: 2 });
-      await fs.chmod(metadataFile, 0o600);
+      await FileUtils.writeJsonAtomic(metadataFile, metadata, { mode: 0o600 });
 
       // Create integrity verification file
       await this._createIntegrityFile(backupDir, metadata);
@@ -144,9 +145,7 @@ class BackupManager {
     const metadataFile = path.join(backupDir, 'metadata.json');
     let metadata = {};
     
-    if (await fs.pathExists(metadataFile)) {
-      metadata = await fs.readJson(metadataFile);
-    }
+    metadata = await FileUtils.readJsonSafe(metadataFile, {});
 
     // Create a backup of current state before restoration
     await this.createBackup('Pre-restore backup');
@@ -238,7 +237,7 @@ class BackupManager {
       throw new Error(`Backup ${timestamp} not found`);
     }
 
-    await fs.remove(backupDir);
+    await FileUtils.safeRemove(backupDir);
   }
 
   /**
@@ -259,7 +258,7 @@ class BackupManager {
         await this.deleteBackup(backup.timestamp);
         deleted++;
       } catch (error) {
-        console.warn(`Failed to delete backup ${backup.timestamp}: ${error.message}`);
+        Logger.warn(`Failed to delete backup ${backup.timestamp}`, { error: error.message });
       }
     }
 
@@ -318,30 +317,12 @@ class BackupManager {
    * Calculate directory size
    */
   async calculateDirectorySize(dirPath) {
-    let totalSize = 0;
-
-    const calculateSize = async (currentPath) => {
-      const stats = await fs.lstat(currentPath);
-      
-      if (stats.isFile()) {
-        totalSize += stats.size;
-      } else if (stats.isDirectory()) {
-        const items = await fs.readdir(currentPath);
-        
-        for (const item of items) {
-          await calculateSize(path.join(currentPath, item));
-        }
-      }
-    };
-
     try {
-      await calculateSize(dirPath);
+      return await FileUtils.getDirectorySize(dirPath);
     } catch (error) {
-      // If we can't calculate size, return 0
+      Logger.debug('Failed to calculate directory size', { error: error.message });
       return 0;
     }
-
-    return totalSize;
   }
 
   /**
@@ -392,7 +373,7 @@ class BackupManager {
     const metadataFile = path.join(backupDir, 'metadata.json');
     if (await fs.pathExists(metadataFile)) {
       try {
-        metadata = await fs.readJson(metadataFile);
+        metadata = await FileUtils.readJsonSafe(metadataFile, null);
       } catch (error) {
         issues.push('Metadata file is corrupted');
       }
@@ -457,12 +438,12 @@ class BackupManager {
         
         // If lock is older than 10 minutes, consider it stale
         if (lockAge > 10 * 60 * 1000) {
-          await fs.remove(this.lockFile);
+          await FileUtils.safeRemove(this.lockFile);
         } else {
           throw new Error(`Backup operation locked by ${lock.operation} since ${lock.created}`);
         }
       } catch (parseError) {
-        await fs.remove(this.lockFile);
+        await FileUtils.safeRemove(this.lockFile);
       }
     }
 
@@ -472,7 +453,7 @@ class BackupManager {
       created: new Date().toISOString()
     };
     
-    await fs.writeJson(this.lockFile, lockData);
+    await FileUtils.writeJsonAtomic(this.lockFile, lockData, { mode: 0o644 });
   }
 
   /**
@@ -480,7 +461,7 @@ class BackupManager {
    */
   async _releaseLock() {
     if (await fs.pathExists(this.lockFile)) {
-      await fs.remove(this.lockFile);
+      await FileUtils.safeRemove(this.lockFile);
     }
   }
 
