@@ -684,7 +684,7 @@ program
       console.log(chalk.cyan('\nRecommendations:'));
       console.log('  • Run "ccvm doctor --fix" to automatically fix issues');
       console.log('  • Run "ccvm status --detailed" for detailed information');
-      console.log('  • Run "ccvm update" to update configuration templates');
+      console.log('  • Run "ccvm add" to add a new provider configuration');
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error during diagnostics:'), error.message);
