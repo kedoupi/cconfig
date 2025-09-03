@@ -182,6 +182,49 @@ backup_existing_config() {
     fi
 }
 
+install_claude_config() {
+    local source_claude_dir=$1
+    
+    if [[ ! -d "$source_claude_dir" ]]; then
+        log INFO "未找到 .claude 配置目录，跳过配置安装"
+        return 0
+    fi
+    
+    log INFO "安装 Claude Code 增强配置..."
+    
+    # 确保 ~/.claude 目录存在
+    mkdir -p "$CLAUDE_DIR"
+    
+    # 复制 .claude 目录内容到 ~/.claude/
+    for item in "$source_claude_dir"/*; do
+        if [[ -e "$item" ]]; then
+            local item_name=$(basename "$item")
+            local target_path="$CLAUDE_DIR/$item_name"
+            
+            if [[ -e "$target_path" ]]; then
+                log INFO "合并配置: $item_name"
+                if [[ -d "$item" ]]; then
+                    # 对于目录，创建目录并复制内容
+                    mkdir -p "$target_path"
+                    # 检查目录是否有内容再复制
+                    if [[ -n $(find "$item" -mindepth 1 -maxdepth 1 2>/dev/null) ]]; then
+                        cp -r "$item"/* "$target_path/" 2>/dev/null || true
+                    fi
+                else
+                    # 对于文件，直接覆盖（已经做了备份）
+                    cp "$item" "$target_path" 2>/dev/null || true
+                fi
+            else
+                # 新文件/目录直接复制
+                cp -r "$item" "$CLAUDE_DIR/" 2>/dev/null || true
+                log INFO "已安装: $item_name"
+            fi
+        fi
+    done
+    
+    log SUCCESS "Claude Code 增强配置已安装到 ~/.claude/"
+}
+
 # ============================================================================
 # 核心安装
 # ============================================================================
@@ -194,9 +237,8 @@ install_dev_mode() {
     
     echo "$SCRIPT_DIR" > "$CCVM_DIR/dev_path"
     
-    if [[ -d "$SCRIPT_DIR/.claude" ]]; then
-        cp -r "$SCRIPT_DIR/.claude" "$CCVM_DIR/"
-    fi
+    # 安装 Claude Code 增强配置
+    install_claude_config "$SCRIPT_DIR/.claude"
     
     log INFO "安装开发依赖..."
     (cd "$SCRIPT_DIR" && npm install --loglevel=error >/dev/null 2>&1) && log SUCCESS "依赖已安装" || log WARN "依赖安装失败"
@@ -216,8 +258,8 @@ install_prod_mode() {
         # 只更新代码文件，保留用户配置
         log INFO "更新代码文件..."
         
-        # 要更新的目录和文件列表
-        local update_items=("bin" "src" "tests" "tools" "package.json" "package-lock.json" "README.md" "LICENSE" ".claude")
+        # 要更新的目录和文件列表（移除 .claude，单独处理）
+        local update_items=("bin" "src" "tests" "tools" "package.json" "package-lock.json" "README.md" "LICENSE")
         
         for item in "${update_items[@]}"; do
             if [[ -e "$temp_dir/$item" ]]; then
@@ -229,6 +271,9 @@ install_prod_mode() {
                 log INFO "已更新: $item"
             fi
         done
+        
+        # 安装 Claude Code 增强配置
+        install_claude_config "$temp_dir/.claude"
         
         # 清理临时目录
         rm -rf "$temp_dir"
