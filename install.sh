@@ -185,36 +185,8 @@ backup_existing_config() {
 # 核心安装
 # ============================================================================
 
-preserve_user_data() {
-    local backup_temp="${CCVM_DIR}_backup_$(date +%s)"
-    
-    if [[ ! -d "$CCVM_DIR" ]]; then
-        return 0
-    fi
-    
-    log WARN "保留用户数据..."
-    mkdir -p "$backup_temp"
-    
-    # 备份重要数据
-    for item in providers backups config.json mcp; do
-        if [[ -e "$CCVM_DIR/$item" ]]; then
-            cp -r "$CCVM_DIR/$item" "$backup_temp/" 2>/dev/null || true
-            log INFO "已备份: $item"
-        fi
-    done
-    
-    echo "$backup_temp"
-}
-
-restore_user_data() {
-    local backup_temp=$1
-    
-    if [[ -d "$backup_temp" ]]; then
-        cp -r "$backup_temp"/* "$CCVM_DIR/" 2>/dev/null || true
-        rm -rf "$backup_temp"
-        log SUCCESS "用户数据已恢复"
-    fi
-}
+# 备份和恢复函数已简化，因为不再需要
+# 生产模式现在只更新代码文件，自动保留用户配置
 
 install_dev_mode() {
     log INFO "开发模式：链接到 $SCRIPT_DIR"
@@ -230,18 +202,35 @@ install_dev_mode() {
 }
 
 install_prod_mode() {
-    log INFO "生产模式：从 GitHub 克隆..."
+    log INFO "生产模式：从 GitHub 更新..."
     
     local temp_dir="${CCVM_DIR}.tmp.$$"
     
     if git clone "https://github.com/${GITHUB_REPO}.git" "$temp_dir"; then
         (cd "$temp_dir" && git checkout "$GITHUB_BRANCH" 2>/dev/null || true)
         
-        # 移动克隆的内容到目标目录
-        if [[ -d "$CCVM_DIR" ]]; then
-            rm -rf "$CCVM_DIR"
-        fi
-        mv "$temp_dir" "$CCVM_DIR"
+        # 确保目标目录存在
+        mkdir -p "$CCVM_DIR"
+        
+        # 只更新代码文件，保留用户配置
+        log INFO "更新代码文件..."
+        
+        # 要更新的目录和文件列表
+        local update_items=("bin" "src" "tests" "tools" "package.json" "package-lock.json" "README.md" "LICENSE" ".claude")
+        
+        for item in "${update_items[@]}"; do
+            if [[ -e "$temp_dir/$item" ]]; then
+                # 如果是目录，先删除旧的再复制新的
+                if [[ -d "$temp_dir/$item" ]]; then
+                    rm -rf "$CCVM_DIR/$item" 2>/dev/null || true
+                fi
+                cp -r "$temp_dir/$item" "$CCVM_DIR/" 2>/dev/null || true
+                log INFO "已更新: $item"
+            fi
+        done
+        
+        # 清理临时目录
+        rm -rf "$temp_dir"
         
         log INFO "安装依赖..."
         (cd "$CCVM_DIR" && npm install --production --loglevel=error >/dev/null 2>&1) || \
@@ -256,13 +245,11 @@ install_ccvm() {
     local mode=$(detect_mode)
     log INFO "安装模式: $mode"
     
-    # 备份用户数据
-    local user_data_backup=$(preserve_user_data)
-    
-    # 确保目录结构
+    # 确保目录结构（不会覆盖已存在的配置）
     mkdir -p "$CLAUDE_DIR"
     mkdir -p "$CCVM_DIR/providers"
     mkdir -p "$CCVM_DIR/backups"
+    mkdir -p "$CCVM_DIR/mcp"
     
     # 根据模式安装
     if [[ "$mode" == "dev" ]]; then
@@ -270,9 +257,6 @@ install_ccvm() {
     else
         install_prod_mode
     fi
-    
-    # 恢复用户数据
-    restore_user_data "$user_data_backup"
     
     # 创建安装标记
     echo "$(date): CCVM installation" > "$CCVM_DIR/.installed_by_ccvm"

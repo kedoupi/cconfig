@@ -44,31 +44,31 @@ const program = new Command();
 
 program
   .name('ccvm')
-  .description('Claude Code Version Manager')
-  .version(packageJson.version);
+  .description('Claude Code 版本管理器 - 多 Provider 配置管理工具')
+  .version(packageJson.version, '-V, --version', '显示版本号')
+  .helpOption('-h, --help', '显示帮助信息')
+  .addHelpCommand('help [command]', '显示命令帮助');
 
 
 // Direct commands (simplified)
 program
   .command('add')
-  .description('Add a new API configuration')
+  .description('添加新的 API 配置')
   .action(async () => {
     try {
-      const spinner = ora('Initializing provider setup...').start();
+      const spinner = ora('正在初始化 Provider 设置...').start();
       await configManager.init();
       spinner.stop();
-
-      console.log(chalk.blue('\n📡 Add New API Provider\n'));
 
       const answers = await inquirer.prompt([
         {
           type: 'input',
           name: 'aliasInput',
-          message: 'Provider name (alias):',
+          message: chalk.blue('📡 添加新的 API Provider\n') + chalk.cyan('Provider 名称 (别名):'),
           validate: (input) => {
-            if (!input) {return 'Provider name is required';}
+            if (!input) {return 'Provider 名称是必填的';}
             if (!/^[a-zA-Z0-9-_]+$/.test(input)) {
-              return 'Provider name can only contain letters, numbers, hyphens, and underscores';
+              return 'Provider 名称只能包含字母、数字、连字符和下划线';
             }
             return true;
           }
@@ -76,37 +76,37 @@ program
         {
           type: 'input',
           name: 'baseURL',
-          message: 'API Base URL:',
+          message: 'API 基础地址:',
           default: 'https://api.anthropic.com',
           validate: (input) => {
-            if (!input) {return 'Base URL is required';}
+            if (!input) {return 'API 地址是必填的';}
             try {
               new URL(input);
               return true;
             } catch {
-              return 'Please enter a valid URL';
+              return '请输入有效的 URL 地址';
             }
           }
         },
         {
           type: 'password',
           name: 'apiKey',
-          message: 'API Key:',
+          message: 'API 密钥:',
           mask: '*',
           validate: (input) => {
-            if (!input) {return 'API Key is required';}
-            if (input.length < 10) {return 'API Key seems too short';}
+            if (!input) {return 'API 密钥是必填的';}
+            if (input.length < 10) {return 'API 密钥太短了';}
             return true;
           }
         },
         {
           type: 'input',
           name: 'timeout',
-          message: 'Request timeout (ms):',
+          message: '请求超时时间 (毫秒):',
           default: '3000000',
           validate: (input) => {
             const num = parseInt(input);
-            if (isNaN(num) || num < 1000) {return 'Timeout must be at least 1000ms';}
+            if (isNaN(num) || num < 1000) {return '超时时间至少为 1000 毫秒';}
             return true;
           }
         }
@@ -119,7 +119,7 @@ program
       };
       delete providerData.aliasInput;
 
-      const addSpinner = ora('Adding provider...').start();
+      const addSpinner = ora('正在添加 Provider...').start();
       
       await providerManager.addProvider(providerData);
       
@@ -137,25 +137,25 @@ program
         
         // Provider configuration saved - no aliases needed
         
-        addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully and set as default!`));
+        addSpinner.succeed(chalk.green(`✅ Provider '${providerData.alias}' 添加成功并设为默认！`));
       } else {
         // Provider configuration saved - no aliases needed
-        addSpinner.succeed(chalk.green(`Provider '${providerData.alias}' added successfully!`));
+        addSpinner.succeed(chalk.green(`✅ Provider '${providerData.alias}' 添加成功！`));
       }
       
-      displaySuccessBanner('Provider ready to use!');
-      console.log(chalk.yellow('\n💡 Usage: claude "your message"'));
+      displaySuccessBanner('Provider 已准备就绪！');
+      console.log(chalk.yellow('\n💡 使用方法: claude "你的消息"'));
       
       
-      console.log(chalk.yellow('\n🚀 Usage examples:'));
-      console.log('   claude "Hello, how are you?"');
-      console.log('   claude "Explain React hooks"');
+      console.log(chalk.yellow('\n🚀 使用示例:'));
+      console.log('   claude "你好，有什么可以帮助你的？"');
+      console.log('   claude "请解释一下 React Hooks"');
       
-      console.log(chalk.blue('\n📝 Set as default provider:'));
+      console.log(chalk.blue('\n📝 设为默认 Provider:'));
       console.log(`   ccvm use ${providerData.alias}`);
 
     } catch (error) {
-      displayErrorBanner('Error adding provider');
+      displayErrorBanner('添加 Provider 时出错');
       console.error(error.message);
       process.exit(1);
     }
@@ -163,34 +163,34 @@ program
 
 program
   .command('show <alias>')
-  .description('Show configuration details')
+  .description('显示配置详情')
   .action(async (alias) => {
     try {
-      const spinner = ora(`Loading provider '${alias}'...`).start();
+      const spinner = ora(`正在加载 Provider '${alias}'...`).start();
       
       await configManager.init();
       const provider = await providerManager.getProvider(alias);
       
       if (!provider) {
-        spinner.fail(chalk.red(`Provider '${alias}' not found`));
-        console.log(chalk.blue('\nRun: ccvm list'));
+        spinner.fail(chalk.red(`Provider '${alias}' 未找到`));
+        console.log(chalk.blue('\n运行: ccvm list'));
         return;
       }
 
       spinner.stop();
 
-      console.log(chalk.blue(`\n📡 Provider Information: ${alias}\n`));
+      console.log(chalk.blue(`\n📡 Provider 信息: ${alias}\n`));
       
-      console.log(chalk.cyan('Configuration:'));
-      console.log(`  Alias: ${provider.alias}`);
-      console.log(`  Base URL: ${provider.baseURL}`);
-      console.log(`  Timeout: ${provider.timeout || '3000000'}ms`);
-      console.log(`  Created: ${provider.created || 'Unknown'}`);
-      console.log(`  Last Used: ${provider.lastUsed || 'Never'}`);
+      console.log(chalk.cyan('配置:'));
+      console.log(`  别名: ${provider.alias}`);
+      console.log(`  基础地址: ${provider.baseURL}`);
+      console.log(`  超时时间: ${provider.timeout || '3000000'}ms`);
+      console.log(`  创建时间: ${provider.created || '未知'}`);
+      console.log(`  最后使用: ${provider.lastUsed || '从未'}`);
       
-      console.log(chalk.cyan('\nUsage:'));
-      console.log(`  ${provider.alias} "your message"     # Use this provider`);
-      console.log(`  ccvm edit ${provider.alias}    # Edit this provider`);
+      console.log(chalk.cyan('\n使用方法:'));
+      console.log(`  claude "你的消息"        # 使用当前 Provider`);
+      console.log(`  ccvm edit ${provider.alias}   # 编辑该 Provider`);
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error showing provider:'), error.message);
@@ -200,32 +200,34 @@ program
 
 program
   .command('list')
-  .description('List all configured API endpoints')
+  .description('列出所有已配置的 API 端点')
   .action(async () => {
     try {
-      const spinner = ora('Loading providers...').start();
+      const spinner = ora('正在加载配置...').start();
       
       await configManager.init();
       const providers = await providerManager.listProviders();
+      const config = await configManager.getConfig();
+      const defaultProvider = config.defaultProvider;
       
       spinner.stop();
 
       if (providers.length === 0) {
-        console.log(chalk.yellow('\n📝 No providers configured yet.'));
-        console.log(chalk.blue('   Run: ccvm add'));
+        console.log(chalk.yellow('\n📝 还没有配置任何 Provider'));
+        console.log(chalk.blue('   运行: ccvm add'));
         return;
       }
 
-      console.log(chalk.blue('\n📡 Configured API Providers\n'));
+      console.log(chalk.blue('\n📡 已配置的 API Provider\n'));
       
       // 创建表格
       const table = new Table({
         head: [
-          chalk.bold('Alias'),
-          chalk.bold('Base URL'), 
-          chalk.bold('Status')
+          chalk.bold('别名'),
+          chalk.bold('API 地址'), 
+          chalk.bold('备注')
         ],
-        colWidths: [15, 40, 12],
+        colWidths: [15, 50, 20],
         style: {
           border: ['gray'],
           head: []
@@ -234,16 +236,29 @@ program
 
       // 添加数据行
       providers.forEach(provider => {
+        const isDefault = provider.alias === defaultProvider;
+        const aliasDisplay = isDefault 
+          ? chalk.green(`${provider.alias} ⭐`) 
+          : chalk.cyan(provider.alias);
+        const noteDisplay = isDefault 
+          ? chalk.green('当前使用') 
+          : chalk.gray('可用');
+          
         table.push([
-          chalk.cyan(provider.alias),
+          aliasDisplay,
           provider.baseURL,
-          chalk.green('✓ Active')
+          noteDisplay
         ]);
       });
 
       console.log(table.toString());
 
-      console.log(chalk.yellow(`\n💡 Total: ${providers.length} provider(s) configured`));
+      console.log(chalk.yellow(`\n💡 共计: ${providers.length} 个 Provider`));
+      if (defaultProvider) {
+        console.log(chalk.green(`⭐ 当前默认: ${defaultProvider}`));
+      } else {
+        console.log(chalk.gray('💡 提示: 使用 ccvm use <别名> 设置默认 Provider'));
+      }
 
     } catch (error) {
       console.error(chalk.red('\n❌ Error listing providers:'), error.message);
@@ -253,45 +268,45 @@ program
 
 program
   .command('edit <alias>')
-  .description('Edit an existing configuration')
+  .description('编辑现有配置')
   .action(async (alias) => {
     try {
-      const spinner = ora(`Loading provider '${alias}'...`).start();
+      const spinner = ora(`正在加载 Provider '${alias}'...`).start();
       
       await configManager.init();
       const provider = await providerManager.getProvider(alias);
       
       if (!provider) {
-        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        spinner.fail(chalk.red(`Provider '${alias}' 未找到`));
         return;
       }
 
       spinner.stop();
 
-      console.log(chalk.blue(`\n📝 Edit Provider: ${alias}\n`));
+      console.log(chalk.blue(`\n📝 编辑 Provider: ${alias}\n`));
 
       const answers = await inquirer.prompt([
         {
           type: 'input',
           name: 'baseURL',
-          message: 'API Base URL:',
+          message: 'API 基础地址:',
           default: provider.baseURL
         },
         {
           type: 'password',
           name: 'apiKey',
-          message: 'API Key (leave empty to keep current):',
+          message: 'API 密钥 (留空保持当前值):',
           mask: '*'
         },
         {
           type: 'input',
           name: 'timeout',
-          message: 'Request timeout (ms):',
+          message: '请求超时时间 (毫秒):',
           default: provider.timeout || '3000000'
         }
       ]);
 
-      const updateSpinner = ora('Updating provider...').start();
+      const updateSpinner = ora('正在更新 Provider...').start();
 
       const updatedProvider = {
         ...provider,
@@ -311,7 +326,7 @@ program
       process.env.ANTHROPIC_AUTH_TOKEN = updatedProvider.apiKey;
       process.env.API_TIMEOUT_MS = updatedProvider.timeout?.toString() || '3000000';
 
-      updateSpinner.succeed(chalk.green(`Provider '${alias}' updated successfully!`));
+      updateSpinner.succeed(chalk.green(`Provider '${alias}' 更新成功！`));
       
       
       console.log(chalk.green('\n✅ Updated configuration loaded:'));
@@ -326,16 +341,16 @@ program
 
 program
   .command('remove <alias>')
-  .description('Remove a configuration')
+  .description('删除配置')
   .action(async (alias) => {
     try {
-      const spinner = ora(`Loading provider '${alias}'...`).start();
+      const spinner = ora(`正在加载 Provider '${alias}'...`).start();
       
       await configManager.init();
       const provider = await providerManager.getProvider(alias);
       
       if (!provider) {
-        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        spinner.fail(chalk.red(`Provider '${alias}' 未找到`));
         return;
       }
 
@@ -345,22 +360,22 @@ program
         {
           type: 'confirm',
           name: 'confirm',
-          message: `Are you sure you want to remove provider '${alias}'?`,
+          message: `确定要删除 Provider '${alias}' 吗？`,
           default: false
         }
       ]);
 
       if (!confirm) {
-        console.log(chalk.yellow('Operation cancelled.'));
+        console.log(chalk.yellow('操作已取消。'));
         return;
       }
 
-      const removeSpinner = ora('Removing provider...').start();
+      const removeSpinner = ora('正在删除 Provider...').start();
 
       await providerManager.removeProvider(alias);
       // Configuration updated - no aliases needed
 
-      removeSpinner.succeed(chalk.green(`Provider '${alias}' removed successfully!`));
+      removeSpinner.succeed(chalk.green(`Provider '${alias}' 删除成功！`));
       
 
     } catch (error) {
@@ -378,7 +393,7 @@ program
 
 program
   .command('use [alias]')
-  .description('Switch to API configuration')
+  .description('切换到指定的 API 配置')
   .action(async (alias) => {
     try {
       await configManager.init();
@@ -392,8 +407,8 @@ program
         if (defaultProvider) {
           const provider = await providerManager.getProvider(defaultProvider);
           if (provider) {
-            console.log(chalk.blue('📡 Current default provider:'));
-            console.log(`   ${provider.alias} (${provider.baseURL})`);
+            console.log(chalk.blue('📡 当前默认 Provider：'));
+            console.log(chalk.green(`   ${provider.alias} (${provider.baseURL})`));
             return;
           }
         }
@@ -413,21 +428,21 @@ program
         }
         
         if (providers.length === 0) {
-          console.log(chalk.yellow('No providers configured yet'));
-          console.log('Usage: ccvm add');
+          console.log(chalk.yellow('还没有配置任何 Provider'));
+          console.log('使用方法: ccvm add');
         } else {
-          console.log(chalk.yellow('No default provider set'));
-          console.log('Usage: ccvm use <alias>');
-          console.log(chalk.dim(`Available providers: ${providers.map(p => p.alias).join(', ')}`));
+          console.log(chalk.yellow('尚未设置默认 Provider'));
+          console.log('使用方法: ccvm use <别名>');
+          console.log(chalk.dim(`可用的 Provider: ${providers.map(p => p.alias).join(', ')}`));
         }
         return;
       }
       
-      const spinner = ora(`Setting default provider to '${alias}'...`).start();
+      const spinner = ora(`正在设置默认 Provider 为 '${alias}'...`).start();
       
       const provider = await providerManager.getProvider(alias);
       if (!provider) {
-        spinner.fail(chalk.red(`Provider '${alias}' not found`));
+        spinner.fail(chalk.red(`找不到 Provider '${alias}'`));
         return;
       }
       
@@ -441,13 +456,13 @@ program
       
       // Default provider updated - claude command will use new default automatically
       
-      spinner.succeed(chalk.green(`Default provider set to '${alias}'`));
+      spinner.succeed(chalk.green(`✅ 默认 Provider 已设置为 '${alias}'`));
       
-      console.log(chalk.yellow('\n💡 Usage:'));
-      console.log(`   ${alias} "Hello, how are you?"`);
+      console.log(chalk.yellow('\n💡 使用方法:'));
+      console.log(`   claude "你好，请问有什么可以帮助你的？"`);
 
     } catch (error) {
-      console.error(chalk.red('\n❌ Error setting default provider:'), error.message);
+      console.error(chalk.red('\n❌ 设置默认 Provider 时出错:'), error.message);
       process.exit(1);
     }
   });
@@ -456,11 +471,11 @@ program
 // Enhanced status command
 program
   .command('status')
-  .description('Show system status and configuration info')
+  .description('显示系统状态和配置信息')
   .option('--detailed', 'Show detailed status information')
   .action(async (options) => {
     try {
-      const spinner = ora('Checking system status...').start();
+      const spinner = ora('正在检查系统状态...').start();
       
       await configManager.init();
       
@@ -494,25 +509,25 @@ program
       }
 
       // System info
-      console.log(chalk.cyan('System Information:'));
-      console.log(`  Version: ${systemInfo.version}`);
+      console.log(chalk.cyan('系统信息:'));
+      console.log(`  版本: ${systemInfo.version}`);
       console.log(`  Node.js: ${systemInfo.nodeVersion}`);
-      console.log(`  Platform: ${systemInfo.platform}`);
-      console.log(`  Install Mode: ${installMode}${installMode === 'Development' ? ' 🔧' : ' 📦'}`);
-      console.log(`  Install Path: ${installPath}`);
-      console.log(`  Initialized: ${systemInfo.initialized ? '✓' : '✗'}`);
-      console.log(`  Config Directory: ${systemInfo.configDir}`);
-      console.log(`  Claude Directory: ${systemInfo.claudeDir}`);
+      console.log(`  平台: ${systemInfo.platform}`);
+      console.log(`  安装模式: ${installMode === 'Development' ? '开发模式 🔧' : '生产模式 📦'}`);
+      console.log(`  安装路径: ${installPath}`);
+      console.log(`  已初始化: ${systemInfo.initialized ? '✓' : '✗'}`);
+      console.log(`  配置目录: ${systemInfo.configDir}`);
+      console.log(`  Claude 目录: ${systemInfo.claudeDir}`);
 
       // Configuration info
-      console.log(chalk.cyan('\nConfiguration:'));
-      console.log(`  Providers: ${providers.length} configured`);
-      console.log(`  Backups: ${backups.length} available`);
-      console.log(`  Default Provider: ${config.defaultProvider || 'None'}`);
-      console.log(`  Last Update: ${backups.length > 0 ? backups[0].timestamp : 'Never'}`);
+      console.log(chalk.cyan('\n配置信息:'));
+      console.log(`  Provider 数量: ${providers.length} 个`);
+      console.log(`  备份数量: ${backups.length} 个`);
+      console.log(`  默认 Provider: ${config.defaultProvider || '未设置'}`);
+      console.log(`  最后更新: ${backups.length > 0 ? backups[0].timestamp : '从未'}`);
 
       // Directory status
-      console.log(chalk.cyan('\nDirectory Status:'));
+      console.log(chalk.cyan('\n目录状态:'));
       console.log(`  ~/.claude/ccvm: ${await fs.pathExists(CONFIG_DIR) ? '✓' : '✗'}`);
       console.log(`  ~/.claude: ${await fs.pathExists(CLAUDE_DIR) ? '✓' : '✗'}`);
       console.log(`  aliases.sh: ${await fs.pathExists(path.join(CONFIG_DIR, 'aliases.sh')) ? '✓' : '✗'}`);
@@ -548,7 +563,7 @@ program
 // Doctor command for comprehensive diagnostics (includes validation)
 program
   .command('doctor')
-  .description('Run comprehensive system diagnostics and validation')
+  .description('运行全面的系统诊断和验证')
   .option('--fix', 'Attempt to fix found issues automatically')
   .action(async (options) => {
     try {
@@ -695,7 +710,7 @@ program
 // Env command - output environment variables for current default provider
 program
   .command('env')
-  .description('Output environment variables for current default provider')
+  .description('输出当前默认 Provider 的环境变量')
   .option('--shell <shell>', 'Shell format (bash, zsh, fish)', 'bash')
   .action(async (options) => {
     try {
@@ -706,17 +721,17 @@ program
       const defaultProvider = config.defaultProvider;
       
       if (!defaultProvider) {
-        console.error('# No default provider configured');
-        console.error('# Run: ccvm add');
-        console.error('# Then: ccvm use <alias>');
+        console.error('# 没有配置默认 Provider');
+        console.error('# 运行: ccvm add');
+        console.error('# 然后: ccvm use <别名>');
         process.exit(1);
       }
       
       // Load provider configuration
       const provider = await providerManager.getProvider(defaultProvider);
       if (!provider) {
-        console.error(`# Provider '${defaultProvider}' not found`);
-        console.error('# Run: ccvm list');
+        console.error(`# Provider '${defaultProvider}' 未找到`);
+        console.error('# 运行: ccvm list');
         process.exit(1);
       }
       
@@ -734,7 +749,7 @@ program
       }
       
     } catch (error) {
-      console.error(`# Error: ${error.message}`);
+      console.error(`# 错误: ${error.message}`);
       process.exit(1);
     }
   });
@@ -742,7 +757,7 @@ program
 // MCP (Model Context Protocol) management commands
 program
   .command('mcp')
-  .description('Manage MCP (Model Context Protocol) services for Claude Code')
+  .description('管理 Claude Code 的 MCP (模型上下文协议) 服务')
   .action(async () => {
     try {
       await mcpManager.showMainMenu();
@@ -756,27 +771,27 @@ program
 program
   .command('*', { hidden: true })
   .action((cmd) => {
-    console.log(chalk.red(`\n❌ Unknown command: ${cmd}`));
-    console.log(chalk.blue('Run "ccvm --help" for available commands.'));
+    console.log(chalk.red(`\n❌ 未知命令: ${cmd}`));
+    console.log(chalk.blue('运行 "ccvm --help" 查看可用命令。'));
     process.exit(1);
   });
 
 // Enhanced error handling
 process.on('uncaughtException', (error) => {
-  console.error(chalk.red('\n💥 Unexpected error:'), error.message);
+  console.error(chalk.red('\n💥 意外错误:'), error.message);
   if (process.env.DEBUG) {
     console.error(chalk.gray(error.stack));
   }
-  console.error(chalk.yellow('For support, please visit: https://github.com/kedoupi/claude-code-kit/issues'));
+  console.error(chalk.yellow('需要帮助请访问: https://github.com/kedoupi/ccvm/issues'));
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error(chalk.red('\n💥 Unhandled promise rejection:'), reason);
+  console.error(chalk.red('\n💥 未处理的 Promise 拒绝:'), reason);
   if (process.env.DEBUG) {
     console.error(chalk.gray(reason.stack || reason));
   }
-  console.error(chalk.yellow('For support, please visit: https://github.com/kedoupi/claude-code-kit/issues'));
+  console.error(chalk.yellow('需要帮助请访问: https://github.com/kedoupi/ccvm/issues'));
   process.exit(1);
 });
 
