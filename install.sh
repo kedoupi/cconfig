@@ -13,7 +13,7 @@ readonly CLAUDE_DIR="${HOME}/.claude"
 readonly CCVM_DIR="${CLAUDE_DIR}/ccvm"
 readonly GITHUB_REPO="kedoupi/ccvm"
 readonly GITHUB_BRANCH="${CCVM_BRANCH:-main}"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$PWD}")" && pwd)"
 
 # 颜色定义
 readonly RED='\033[0;31m'
@@ -66,6 +66,7 @@ get_version() {
 }
 
 detect_mode() {
+    # When run via curl | bash, SCRIPT_DIR will be PWD, so check for dev files there
     if [[ -f "${SCRIPT_DIR}/bin/ccvm.js" && -f "${SCRIPT_DIR}/package.json" ]]; then
         echo "dev"
     else
@@ -79,7 +80,7 @@ detect_shell_config() {
     case "$shell_name" in
         zsh)  echo "${HOME}/.zshrc" ;;
         bash)
-            if [[ "$OSTYPE" == "darwin"* ]]; then
+            if [[ "${OSTYPE:-}" == "darwin"* ]]; then
                 echo "${HOME}/.bash_profile"
             else
                 echo "${HOME}/.bashrc"
@@ -491,6 +492,6 @@ main() {
 }
 
 # 执行主函数
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
     main "$@"
 fi
