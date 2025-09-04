@@ -113,9 +113,14 @@ ccvm use <别名>
 # 使用claude命令（自动加载CCVM配置）
 claude "你的问题"
 
+# 临时切换到特定提供商（不修改默认配置）
+claude -P <提供商别名> "你的问题"
+claude --provider <提供商别名> "你的问题"
+
 # 例如：
-claude "解释 React hooks"
-claude "设计一个 REST API"
+claude "解释 React hooks"                    # 使用默认提供商
+claude -P anthropic "设计一个 REST API"      # 临时使用anthropic
+claude --provider custom-api "翻译文档"     # 临时使用custom-api
 ```
 
 5. **系统状态检查**
@@ -155,12 +160,37 @@ ccvm add
 # URL: https://your-custom-api.com
 # 密钥: your-custom-key
 
-# 切换和使用不同提供商
+# 设置默认提供商并使用
 ccvm use anthropic
 claude "技术问题咨询"
 
-ccvm use custom  
-claude "使用自定义API的问题"
+# 临时切换到其他提供商（推荐方式）
+claude -P custom "使用自定义API的问题"
+claude --provider backup-api "紧急情况使用备用API"
+
+# 组合使用其他参数
+claude -P anthropic --debug "调试模式下的技术问题"
+claude --provider custom --pp "跳过权限检查的操作"
+```
+
+#### 临时 Provider 切换（高级用法）
+```bash
+# 无需修改默认配置的临时切换（推荐）
+claude -P backup-api "使用备用API处理紧急情况"
+claude --provider test-env "在测试环境中验证功能"
+
+# 参数组合使用
+claude -P anthropic-cn --debug "中文API调试模式"
+claude --provider custom-api --pp "绕过权限检查的特殊操作"
+
+# 快速多Provider工作流
+claude -P fast-api "快速原型开发问题"        # 使用快速API
+claude -P quality-api "生产级代码review"    # 切换到高质量API
+claude -P cost-api "大量数据处理任务"        # 切换到经济型API
+
+# 错误恢复场景
+claude "主要任务"                          # 默认API失败
+claude -P backup-api "主要任务"           # 快速切换到备用API
 ```
 
 #### 团队协作配置

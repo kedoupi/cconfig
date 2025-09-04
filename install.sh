@@ -347,21 +347,55 @@ ccvm() {
 }
 
 claude() {
-    # Load CCVM environment
-    eval "$(ccvm env 2>/dev/null)"
-    if [ $? -ne 0 ]; then
-        echo "❌ Failed to load CCVM configuration"
-        echo "💡 Run: ccvm add"
-        return 1
-    fi
-    
-    # Handle --pp shortcut
+    # Parse temporary provider and arguments
+    local provider=""
     local args=()
-    for arg in "$@"; do
-        [[ "$arg" == "--pp" ]] && arg="--dangerously-skip-permissions"
-        args+=("$arg")
+    
+    # Argument parsing loop
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -P|--provider)
+                if [[ -z "$2" || "$2" =~ ^- ]]; then
+                    echo "❌ 错误: -P/--provider 需要指定 Provider 名称" >&2
+                    echo "💡 用法: claude -P <provider> <prompt>" >&2
+                    return 1
+                fi
+                provider="$2"
+                shift 2
+                ;;
+            --pp)
+                # Handle --pp shortcut
+                args+=("--dangerously-skip-permissions")
+                shift
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
     done
     
+    # Load environment variables
+    if [[ -n "$provider" ]]; then
+        # Temporary provider mode
+        eval "$(ccvm env --provider "$provider" 2>/dev/null)"
+        local env_exit_code=$?
+        if [[ $env_exit_code -ne 0 ]]; then
+            echo "❌ 无法加载 Provider '$provider' 配置" >&2
+            echo "💡 运行 'ccvm list' 查看可用的 Provider" >&2
+            return 1
+        fi
+    else
+        # Default provider mode
+        eval "$(ccvm env 2>/dev/null)"
+        if [[ $? -ne 0 ]]; then
+            echo "❌ 无法加载 CCVM 配置" >&2
+            echo "💡 运行: ccvm add" >&2
+            return 1
+        fi
+    fi
+    
+    # Execute native claude command
     command claude "${args[@]}"
 }
 EOF

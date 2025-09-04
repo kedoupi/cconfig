@@ -75,7 +75,7 @@ describe('CCVM Commands', () => {
     test('ccvm env should handle no default provider', () => {
       const result = runCommand('env');
       expect(result.success).toBe(false);
-      expect(result.output).toContain('No default provider');
+      expect(result.output).toContain('没有配置默认 Provider');
     });
 
     test('ccvm use without args should show interactive menu or message', () => {
@@ -152,6 +152,19 @@ describe('CCVM Commands', () => {
     test('ccvm env --shell fish should output fish format', () => {
       const result = runCommand('env --shell fish');
       // Will fail due to no provider, but should recognize the option
+      expect(result.output).toBeDefined();
+    });
+
+    test('ccvm env --provider nonexistent should handle non-existent provider', () => {
+      const result = runCommand('env --provider nonexistent');
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("Provider 'nonexistent' 未找到");
+      expect(result.output).toContain('ccvm list');
+    });
+
+    test('ccvm env --provider option should be recognized', () => {
+      const result = runCommand('env --provider test --shell bash');
+      // Command should recognize both options even if provider doesn't exist
       expect(result.output).toBeDefined();
     });
   });

@@ -113,9 +113,14 @@ ccvm use <alias>
 # Use claude command (automatically loads CCVM config)
 claude "your question"
 
+# Temporary switch to specific provider (without changing default)
+claude -P <provider-alias> "your question"
+claude --provider <provider-alias> "your question"
+
 # Examples:
-claude "Explain React hooks"
-claude "Design a REST API"
+claude "Explain React hooks"                    # Use default provider
+claude -P anthropic "Design a REST API"        # Temporarily use anthropic
+claude --provider custom-api "Translate docs"  # Temporarily use custom-api
 ```
 
 5. **System Status Check**
@@ -155,12 +160,37 @@ ccvm add
 # URL: https://your-custom-api.com
 # Key: your-custom-key
 
-# Switch between and use different providers
+# Set default provider and use
 ccvm use anthropic
 claude "Technical consultation"
 
-ccvm use custom
-claude "Question using custom API"
+# Temporary switch to other providers (recommended approach)
+claude -P custom "Question using custom API"
+claude --provider backup-api "Emergency backup API usage"
+
+# Combine with other parameters
+claude -P anthropic --debug "Technical question in debug mode"
+claude --provider custom --pp "Skip permission check operation"
+```
+
+#### Temporary Provider Switching (Advanced Usage)
+```bash
+# Temporary switching without modifying default config (recommended)
+claude -P backup-api "Handle emergency with backup API"
+claude --provider test-env "Verify features in test environment"
+
+# Parameter combinations
+claude -P anthropic-cn --debug "Chinese API debug mode"
+claude --provider custom-api --pp "Special operation bypassing permission checks"
+
+# Quick multi-provider workflows
+claude -P fast-api "Rapid prototyping questions"      # Use fast API
+claude -P quality-api "Production-grade code review"  # Switch to high-quality API
+claude -P cost-api "Large data processing tasks"      # Switch to economical API
+
+# Error recovery scenarios
+claude "Main task"                                   # Default API fails
+claude -P backup-api "Main task"                    # Quick switch to backup API
 ```
 
 #### Team Collaboration Setup

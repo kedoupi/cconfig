@@ -730,28 +730,36 @@ program
 // Env command - output environment variables for current default provider
 program
   .command('env')
-  .description('输出当前默认 Provider 的环境变量')
+  .description('输出指定或默认 Provider 的环境变量')
   .option('--shell <shell>', 'Shell format (bash, zsh, fish)', 'bash')
+  .option('--provider <alias>', '指定 Provider 别名')
   .action(async (options) => {
     try {
       await configManager.init();
       
-      // Get current configuration
-      const config = await configManager.getConfig();
-      const defaultProvider = config.defaultProvider;
+      let targetProvider = options.provider;
       
-      if (!defaultProvider) {
-        console.error('# 没有配置默认 Provider');
-        console.error('# 运行: ccvm add');
-        console.error('# 然后: ccvm use <别名>');
-        process.exit(1);
+      // If no provider specified, use default
+      if (!targetProvider) {
+        const config = await configManager.getConfig();
+        targetProvider = config.defaultProvider;
+        
+        if (!targetProvider) {
+          console.error('# 没有配置默认 Provider');
+          console.error('# 运行: ccvm add');
+          console.error('# 然后: ccvm use <别名>');
+          process.exit(1);
+        }
       }
       
       // Load provider configuration
-      const provider = await providerManager.getProvider(defaultProvider);
+      const provider = await providerManager.getProvider(targetProvider);
       if (!provider) {
-        console.error(`# Provider '${defaultProvider}' 未找到`);
+        console.error(`# Provider '${targetProvider}' 未找到`);
         console.error('# 运行: ccvm list');
+        if (options.provider) {
+          console.error(`# 或者: ccvm add`);
+        }
         process.exit(1);
       }
       
