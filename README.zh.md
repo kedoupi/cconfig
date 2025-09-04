@@ -44,6 +44,7 @@ CCVM（Claude Code Version Manager）是一个综合性的 Claude Code 配置管
 - 🛡️ **安全凭据管理** - 安全存储和管理 API 密钥，支持权限控制
 - 🚀 **一键安装配置** - 自动环境检测，智能安装和配置
 - ⚡ **智能Claude集成** - 无缝集成原生Claude命令，自动环境变量配置
+- 📦 **MCP服务管理** - 为 Claude Desktop 安装和管理模型上下文协议服务
 - 🔄 **自动备份恢复** - 配置变更自动备份，支持一键恢复
 - 🩺 **系统诊断工具** - 全面的系统检查和问题诊断
 - 🎯 **简洁设计理念** - 减少命令冗余，统一管理界面
@@ -158,6 +159,24 @@ ccvm use anthropic
 ccvm history
 ```
 
+#### MCP 服务管理
+```bash
+# Claude Code 的交互式 MCP 管理
+ccvm mcp
+# 选择 "📋 查看推荐 MCP 服务" 来浏览可用服务
+# 选择 "➕ 安装 MCP 服务到 Claude Code" 进行安装
+# 选择 "🔧 检查环境配置" 来诊断问题
+
+# 推荐的 MCP 服务：
+# - 文件系统 MCP：本地文件访问
+# - 顺序思维：结构化推理
+# - 内存银行：持久化内存存储
+# - Docker MCP：容器管理
+
+# 查看已安装的服务（Claude Code 原生命令）
+claude mcp list
+```
+
 ### 🏗️ 系统架构
 
 ```
@@ -223,6 +242,7 @@ claude() {
 | `ccvm history` | 查看/恢复配置备份 | `ccvm history` |
 | `ccvm status [--detailed]` | 显示系统状态 | `ccvm status --detailed` |
 | `ccvm doctor [--fix]` | 运行系统诊断 | `ccvm doctor --fix` |
+| `ccvm mcp` | 管理 Claude Code 的 MCP 服务 | `ccvm mcp` |
 
 ### 🛠️ 开发指南
 

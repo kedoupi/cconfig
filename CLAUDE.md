@@ -175,7 +175,8 @@ ccvm
 ├── update [--force]        # Update configuration templates
 ├── history                 # View/restore configuration backups
 ├── status [--detailed]     # Show system status
-└── doctor [--fix]          # Run system diagnostics
+├── doctor [--fix]          # Run system diagnostics
+└── mcp                     # Manage MCP services for Claude Code
 ```
 
 ## Claude Function Integration
