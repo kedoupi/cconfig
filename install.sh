@@ -419,6 +419,8 @@ install_cli_tools() {
         log ERROR "Claude Code CLI 是必需的"
     
     install_npm_package "@cometix/ccline" "ccline" || true
+    
+    install_npm_package "ccusage" "ccusage" || true
 }
 
 # ============================================================================
@@ -493,6 +495,7 @@ show_completion() {
     echo "  ✅ CCVM 核心 ($mode 模式)"
     echo "  ✅ Shell 函数 (ccvm + claude)"
     echo "  ✅ Claude Code CLI"
+    echo "  ✅ ccusage (使用统计分析工具)"
     echo
     
     echo -e "${YELLOW}🔄 激活配置:${NC}"
@@ -503,9 +506,11 @@ show_completion() {
     if has_existing_providers; then
         echo "  ccvm status              # 查看状态"
         echo "  claude \"Hello Claude!\"   # 开始对话"
+        echo "  ccusage                  # 查看使用统计"
     else
         echo "  ccvm add                 # 添加配置"
         echo "  ccvm status              # 查看状态"
+        echo "  ccusage                  # 查看使用统计"
     fi
     echo
     

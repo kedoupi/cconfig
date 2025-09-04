@@ -581,7 +581,7 @@ program
 
       // Check dependencies
       console.log(chalk.cyan('\nDependencies:'));
-      const dependencies = ['jq', 'claude'];
+      const dependencies = ['jq', 'claude', 'ccline', 'ccusage'];
       for (const dep of dependencies) {
         try {
           const { exec } = require('child_process');
@@ -589,9 +589,29 @@ program
           const execAsync = promisify(exec);
           
           await execAsync(`which ${dep}`);
-          console.log(`  ${dep}: ✅ Available`);
+          
+          // Get version info for certain tools
+          if (dep === 'ccusage' || dep === 'ccline' || dep === 'claude') {
+            try {
+              const { stdout: versionOutput } = await execAsync(`${dep} --version`);
+              const version = versionOutput.trim().match(/[\d.]+/)?.[0] || 'unknown';
+              console.log(`  ${dep}: ✅ Available (v${version})`);
+            } catch {
+              console.log(`  ${dep}: ✅ Available`);
+            }
+          } else {
+            console.log(`  ${dep}: ✅ Available`);
+          }
         } catch {
-          console.log(`  ${dep}: ❌ Not found`);
+          let status = '❌ Not found';
+          if (dep === 'jq') {
+            status += ' (recommended)';
+          } else if (dep === 'ccline') {
+            status += ' (optional enhancement)';  
+          } else if (dep === 'ccusage') {
+            status += ' (usage analytics tool)';
+          }
+          console.log(`  ${dep}: ${status}`);
         }
       }
 

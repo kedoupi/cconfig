@@ -45,6 +45,7 @@ CCVM（Claude Code Version Manager）是一个综合性的 Claude Code 配置管
 - 🚀 **一键安装配置** - 自动环境检测，智能安装和配置
 - ⚡ **智能Claude集成** - 无缝集成原生Claude命令，自动环境变量配置
 - 📦 **MCP服务管理** - 为 Claude Desktop 安装和管理模型上下文协议服务
+- 📊 **使用统计分析** - 集成 ccusage 工具，全面分析 Claude Code 使用情况和成本估算
 - 🔄 **自动备份恢复** - 配置变更自动备份，支持一键恢复
 - 🩺 **系统诊断工具** - 全面的系统检查和问题诊断
 - 🎯 **简洁设计理念** - 减少命令冗余，统一管理界面
@@ -121,6 +122,21 @@ claude "设计一个 REST API"
 ```bash
 ccvm status
 ccvm doctor
+```
+
+6. **使用统计分析**
+```bash
+# 查看全面的使用统计信息
+ccusage
+
+# 每日使用报告
+ccusage --daily
+
+# 月度使用汇总  
+ccusage --monthly
+
+# 实时会话监控
+ccusage --live
 ```
 
 ### 💡 使用示例
