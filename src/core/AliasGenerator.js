@@ -227,6 +227,16 @@ class AliasGenerator {
 # Shell: ${this.shellType}
 # Generated: ${new Date().toISOString()}
 
+# Check if claude CLI is available
+_cc_check_claude_cli() {
+    if ! command -v claude >/dev/null 2>&1; then
+        echo "Error: Claude CLI is not installed or not in PATH" >&2
+        echo "Install with: npm install -g @anthropic-ai/claude-cli" >&2
+        return 1
+    fi
+    return 0
+}
+
 # Enhanced helper function to load Claude configuration
 _cc_load_config() {
     local config_file="$1"
@@ -461,6 +471,34 @@ _cc_claude_exec_dynamic() {
     
     # Use the existing _cc_claude_exec function with the default provider
     _cc_claude_exec "$default_provider" "$@"
+}
+
+# Function to list all providers
+claude-providers() {
+    if ! command -v ccvm >/dev/null 2>&1; then
+        echo "Error: ccvm command not found" >&2
+        return 1
+    fi
+    ccvm list
+}
+
+# Function to reload aliases
+claude-reload() {
+    if ! command -v ccvm >/dev/null 2>&1; then
+        echo "Error: ccvm command not found" >&2
+        return 1
+    fi
+    echo "Reloading Claude Code Kit aliases..."
+    if ccvm doctor --fix >/dev/null 2>&1; then
+        echo "✅ Aliases reloaded successfully"
+        # Re-source this file to apply changes
+        if [ -f "$HOME/.claude/ccvm/aliases.sh" ]; then
+            source "$HOME/.claude/ccvm/aliases.sh"
+        fi
+    else
+        echo "❌ Failed to reload aliases" >&2
+        return 1
+    fi
 }`;
   }
 
@@ -480,13 +518,13 @@ _cc_claude_exec_dynamic() {
 # Run 'ccvm add' to add your first provider`;
     }
 
-    // List configured providers for reference only (no aliases)
-    const providerList = providers.map(provider => 
-      `#   ${provider.alias}: ${provider.baseURL}`
+    // Generate shell aliases for each provider
+    const providerAliases = providers.map(provider => 
+      `alias ${provider.alias}='_cc_load_config && _cc_claude_exec_dynamic'`
     ).join('\n');
 
-    return `# Configured providers (use 'ccvm use <alias>' to switch):
-${providerList}`;
+    return `# Provider aliases:
+${providerAliases}`;
   }
 
   /**
@@ -536,23 +574,35 @@ alias claude='_cc_claude_exec_dynamic'`;
     }
   }
 
+  /**
+   * Generate footer with provider statistics and available commands
+   * 
+   * @param {ProviderConfig[]} providers - Array of provider configurations
+   * @returns {string} Footer content with statistics and commands
+   * 
+   * @example
+   * const footer = aliasGenerator.generateFooter(providers);
+   * console.log(footer);
+   */
   generateFooter(providers) {
     const providerCount = providers.length;
 
-    return `# Claude Code Kit - Simplified Configuration
+    let footer = `# Claude Code Kit Statistics
 # Total providers configured: ${providerCount}
-#
-# Usage:
-#   claude "your message"              # Uses current default provider
-#
-# Management commands:
-#   ccvm list                          # List all providers
-#   ccvm use <alias>                   # Switch default provider  
-#   ccvm add                           # Add a new provider
-#   ccvm status                        # Show system status
-#
-# ✨ No manual reload needed - changes take effect immediately!
-# For more information: https://github.com/kedoupi/claude-code-kit`;
+# Available commands:
+#   claude-providers()          - List all providers
+#   claude-reload()              - Reload aliases`;
+
+    if (providerCount > 0) {
+      footer += '\n#\n# Configured providers:';
+      providers.forEach(provider => {
+        footer += `\n#   ${provider.alias}: ${provider.baseURL}`;
+      });
+    } else {
+      footer += '\n#\n# (none configured)';
+    }
+
+    return footer;
   }
 
   /**

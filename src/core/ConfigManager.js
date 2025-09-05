@@ -16,6 +16,37 @@ const Logger = require('../utils/Logger');
 const FileUtils = require('../utils/FileUtils');
 
 /**
+ * 安全配置目录获取
+ * 在测试模式下返回安全的配置目录，防止操作实际用户数据
+ * @param {string} customDir - 自定义配置目录
+ * @returns {string} 安全的配置目录路径
+ */
+function getSafeConfigDir(customDir) {
+  // 如果在测试模式，确保配置目录在测试环境中
+  if (process.env.CCVM_TEST_MODE === 'true') {
+    const testHome = process.env.HOME || os.tmpdir();
+    const realHome = os.homedir();
+    
+    // 如果提供了自定义目录且是绝对路径，直接使用
+    if (customDir && path.isAbsolute(customDir)) {
+      return customDir;
+    }
+    
+    // 如果提供了自定义目录且指向真实用户目录，映射到测试环境
+    if (customDir && customDir.startsWith(realHome)) {
+      const relativePath = path.relative(realHome, customDir);
+      return path.join(testHome, relativePath);
+    }
+    
+    // 使用测试环境中的配置目录
+    return customDir || path.join(testHome, '.claude', 'ccvm');
+  }
+  
+  // 正常模式：使用提供的目录或默认目录
+  return customDir || path.join(os.homedir(), '.claude', 'ccvm');
+}
+
+/**
  * @typedef {Object} ConfigManagerOptions
  * @property {string} configDir - Configuration directory path
  */
@@ -54,13 +85,19 @@ class ConfigManager {
    * @returns {ConfigManager}
    */
   constructor(configDir = path.join(os.homedir(), '.claude', 'ccvm')) {
-    this.configDir = configDir;
-    this.claudeDir = path.join(os.homedir(), '.claude');
-    this.providersDir = path.join(configDir, 'providers');
-    this.backupsDir = path.join(configDir, 'backups');
-    this.aliasesFile = path.join(configDir, 'aliases.sh');
-    this.lockFile = path.join(configDir, '.lock');
-    this.configFile = path.join(configDir, 'config.json');
+    // 使用安全的配置目录
+    this.configDir = getSafeConfigDir(configDir);
+    
+    // 在测试模式下，claudeDir 也应该在测试环境中
+    const homeDir = process.env.CCVM_TEST_MODE === 'true' 
+      ? (process.env.HOME || os.tmpdir())
+      : os.homedir();
+    this.claudeDir = path.join(homeDir, '.claude');
+    this.providersDir = path.join(this.configDir, 'providers');
+    this.backupsDir = path.join(this.configDir, 'backups');
+    this.aliasesFile = path.join(this.configDir, 'aliases.sh');
+    this.lockFile = path.join(this.configDir, '.lock');
+    this.configFile = path.join(this.configDir, 'config.json');
     
     // Default configuration (simplified - only actual used fields)
     this.defaultConfig = {

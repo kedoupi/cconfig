@@ -15,12 +15,9 @@ describe('CCVM CLI Commands', () => {
   beforeEach(() => {
     testDir = path.join(os.tmpdir(), 'ccvm-test-' + Date.now());
     fs.ensureDirSync(testDir);
-    originalHome = process.env.HOME;
-    process.env.HOME = testDir;
   });
 
   afterEach(() => {
-    process.env.HOME = originalHome;
     if (fs.existsSync(testDir)) {
       fs.removeSync(testDir);
     }

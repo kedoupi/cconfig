@@ -16,13 +16,10 @@ describe('CLI Integration', () => {
     const testEnv = await createTestEnvironment('cli-integration');
     testConfigDir = testEnv.configDir;
     
-    // Mock HOME directory for consistent testing
-    originalHome = process.env.HOME;
-    process.env.HOME = path.dirname(testConfigDir);
+    // 测试环境变量由全局 setup 管理
   });
 
   afterEach(async () => {
-    process.env.HOME = originalHome;
     await cleanupTestEnvironment(testConfigDir);
   });
 
@@ -54,7 +51,7 @@ describe('CLI Integration', () => {
     it('should show help information', () => {
       const result = runCLI('--help');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Claude Code Version Manager');
+      expect(result.stdout).toContain('Claude Code 版本管理器');
       expect(result.stdout).toContain('Commands:');
       expect(result.stdout).toContain('add');
       expect(result.stdout).toContain('status');
@@ -64,7 +61,7 @@ describe('CLI Integration', () => {
     it('should handle unknown commands gracefully', () => {
       const result = runCLI('unknown-command');
       expect(result.exitCode).toBe(1);
-      expect(result.stderr || result.stdout).toContain('Unknown command');
+      expect(result.stderr || result.stdout).toContain('未知命令');
     });
   });
 
@@ -72,7 +69,7 @@ describe('CLI Integration', () => {
     it('should show help with available commands', () => {
       const result = runCLI('--help');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Add a new API configuration');
+      expect(result.stdout).toContain('添加新的 API 配置');
       expect(result.stdout).toContain('add');
       expect(result.stdout).toContain('list');
       expect(result.stdout).toContain('show');
@@ -81,7 +78,8 @@ describe('CLI Integration', () => {
     it('should list providers successfully', () => {
       const result = runCLI('list');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('API Providers');
+      // Should either show no providers or existing providers
+      expect(result.stdout).toMatch(/已配置的 API Provider|还没有配置任何 Provider/);
     });
 
     it('should handle provider operations with proper initialization', async () => {
@@ -99,15 +97,15 @@ describe('CLI Integration', () => {
     it('should show basic status information', () => {
       const result = runCLI('status');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('CCVM (Claude Code Version Manager) Status');
-      expect(result.stdout).toContain('Configuration');
-      expect(result.stdout).toContain('Directory Status');
+      expect(result.stdout).toContain('Claude Code Version Manager');
+      expect(result.stdout).toContain('配置信息');
+      expect(result.stdout).toContain('目录状态');
     });
 
     it('should show detailed status when requested', () => {
       const result = runCLI('status --detailed');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('CCVM (Claude Code Version Manager) Status');
+      expect(result.stdout).toContain('Claude Code Version Manager');
       // Detailed view should contain more information
       expect(result.stdout.length).toBeGreaterThan(500);
     });
@@ -212,8 +210,8 @@ describe('CLI Integration', () => {
       expect(result.exitCode).toBe(0);
       
       // Check for consistent formatting patterns
-      expect(result.stdout).toMatch(/CCVM \(Claude Code Version Manager\) Status/);
-      expect(result.stdout).toMatch(/Configuration:/);
+      expect(result.stdout).toMatch(/Claude Code Version Manager/);
+      expect(result.stdout).toMatch(/系统信息:/);
       
       // Should not contain debugging output in normal mode
       expect(result.stdout).not.toContain('[DEBUG]');
@@ -223,7 +221,8 @@ describe('CLI Integration', () => {
     it('should handle provider list formatting', () => {
       const result = runCLI('list');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('API Providers');
+      // Should handle both empty and populated provider lists
+      expect(result.stdout).toMatch(/已配置的 API Provider|还没有配置任何 Provider/);
     });
   });
 

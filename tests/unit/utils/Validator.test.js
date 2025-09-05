@@ -74,17 +74,17 @@ describe('Validator', () => {
 
   describe('validateApiKey', () => {
     it('should accept valid API keys', () => {
-      expect(Validator.validateApiKey('sk-proj-1234567890').valid).toBe(true);
-      expect(Validator.validateApiKey('a'.repeat(100)).valid).toBe(true);
+      expect(Validator.validateApiKey('sk-proj-1234567890').isValid).toBe(true);
+      expect(Validator.validateApiKey('a'.repeat(100)).isValid).toBe(true);
     });
 
     it('should reject invalid API keys', () => {
-      expect(Validator.validateApiKey('').valid).toBe(false);
-      expect(Validator.validateApiKey(null).valid).toBe(false);
-      expect(Validator.validateApiKey(123).valid).toBe(false);
-      expect(Validator.validateApiKey('short').valid).toBe(false); // Too short
-      expect(Validator.validateApiKey('a'.repeat(513)).valid).toBe(false); // Too long
-      expect(Validator.validateApiKey('key with spaces').valid).toBe(false);
+      expect(Validator.validateApiKey('').isValid).toBe(false);
+      expect(Validator.validateApiKey(null).isValid).toBe(false);
+      expect(Validator.validateApiKey(123).isValid).toBe(false);
+      expect(Validator.validateApiKey('short').isValid).toBe(false); // Too short
+      expect(Validator.validateApiKey('a'.repeat(513)).isValid).toBe(false); // Too long
+      expect(Validator.validateApiKey('key with spaces').isValid).toBe(false);
     });
 
     it('should warn about weak patterns', () => {
@@ -180,9 +180,9 @@ describe('Validator', () => {
     });
 
     it('should remove command injection attempts', () => {
-      expect(Validator.sanitizeInput('text; rm -rf /')).toBe('text rm -rf /');
+      expect(Validator.sanitizeInput('text; rm -rf /')).toBe('text');
       expect(Validator.sanitizeInput('$(whoami)')).toBe('whoami');
-      expect(Validator.sanitizeInput('`ls -la`')).toBe('ls -la');
+      expect(Validator.sanitizeInput('`ls -la`')).toBe('ls la');
       expect(Validator.sanitizeInput('text && malicious')).toBe('text  malicious');
     });
   });

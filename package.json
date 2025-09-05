@@ -12,11 +12,18 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "node tools/integration-test.js",
+    "test:performance": "node tests/performance/benchmark.js",
     "lint": "eslint src/ tests/ bin/",
     "lint:fix": "eslint src/ tests/ bin/ --fix",
     "format": "prettier --write src/ tests/ bin/",
+    "format:check": "prettier --check src/ tests/ bin/",
     "build": "echo 'No build step required for CLI tool'",
-    "prepack": "npm run lint && npm run test"
+    "prepack": "npm run lint && npm run test && npm run format:check",
+    "clean": "rm -rf node_modules/ package-lock.json coverage/ .nyc_output/",
+    "reset": "npm run clean && npm install",
+    "size": "npm run build && find src/ -name '*.js' | xargs wc -l | tail -1",
+    "docs": "jsdoc src/ -d docs/api/",
+    "prepare": "husky install"
   },
   "keywords": [
     "claude",
@@ -46,8 +53,12 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-node": "^11.1.0",
+    "husky": "^8.0.3",
     "jest": "^29.7.0",
-    "prettier": "^3.1.1"
+    "jsdoc": "^4.0.2",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "benchmark": "^2.1.4"
   },
   "repository": {
     "type": "git",
@@ -64,5 +75,17 @@
     "tools/",
     "install.sh",
     "README.md"
-  ]
+  ],
+  "lint-staged": {
+    "*.{js,json}": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
+    }
+  }
 }

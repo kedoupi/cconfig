@@ -7,11 +7,15 @@
 const path = require('path');
 const fs = require('fs-extra');
 const os = require('os');
+const testEnvManager = require('../helpers/TestEnvironmentManager');
 
 // Global test configuration
 global.TEST_TIMEOUT = 30000;
 global.TEST_CONFIG_DIR = path.join(os.tmpdir(), 'cc-test-config');
 global.TEST_CLAUDE_DIR = path.join(os.tmpdir(), 'cc-test-claude');
+
+// 安全的环境变量管理器
+global.testEnvManager = testEnvManager;
 
 // Setup before all tests
 beforeAll(async () => {
@@ -33,9 +37,18 @@ afterAll(async () => {
 
 // Setup before each test
 beforeEach(async () => {
+  // 激活安全的测试环境
+  testEnvManager.activate(global.TEST_CONFIG_DIR);
+  
   // Clean test directories before each test
   await fs.emptyDir(global.TEST_CONFIG_DIR);
   await fs.emptyDir(global.TEST_CLAUDE_DIR);
+});
+
+// Cleanup after each test
+afterEach(() => {
+  // 停用测试环境，恢复原始环境变量
+  testEnvManager.deactivate();
 });
 
 // Suppress console.log during tests unless explicitly testing logging

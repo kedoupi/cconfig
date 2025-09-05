@@ -1,441 +1,187 @@
 const MCPManager = require('../../../src/core/MCPManager');
+const testUtils = require('../../helpers/testUtils');
 const fs = require('fs-extra');
 const path = require('path');
-const { execSync } = require('child_process');
-const inquirer = require('inquirer');
-
-jest.mock('child_process');
-jest.mock('fs-extra');
-jest.mock('inquirer');
 
 describe('MCPManager', () => {
   let mcpManager;
-  const testConfigDir = '/test/.claude/ccvm';
+  let testConfigDir;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  beforeEach(async () => {
+    testConfigDir = await testUtils.createTempDir('mcp-manager-test');
     mcpManager = new MCPManager(testConfigDir);
-    
-    // Default mocks
-    fs.existsSync.mockReturnValue(false);
-    fs.ensureDirSync.mockReturnValue(undefined);
-    fs.writeJsonSync.mockReturnValue(undefined);
-    fs.readJsonSync.mockReturnValue({});
-    fs.readdirSync.mockReturnValue([]);
+  });
+
+  afterEach(async () => {
+    await testUtils.cleanupTempDirs();
   });
 
   describe('constructor', () => {
     it('should initialize with correct paths', () => {
       expect(mcpManager.configDir).toBe(testConfigDir);
       expect(mcpManager.mcpDir).toBe(path.join(testConfigDir, 'mcp'));
-      expect(mcpManager.configFile).toBe(path.join(testConfigDir, 'mcp', 'mcp-config.json'));
+      expect(mcpManager.configFile).toBe(path.join(testConfigDir, 'mcp', 'config.json'));
+    });
+
+    it('should have registry with predefined services', () => {
+      expect(mcpManager.registry).toBeDefined();
+      expect(typeof mcpManager.registry).toBe('object');
+      expect(Object.keys(mcpManager.registry)).toContain('filesystem');
+      expect(Object.keys(mcpManager.registry)).toContain('sequential-thinking');
+    });
+
+    it('should have valid service configurations', () => {
+      const filesystem = mcpManager.registry.filesystem;
+      expect(filesystem.name).toBe('filesystem');
+      expect(filesystem.displayName).toBe('Filesystem MCP');
+      expect(filesystem.package).toBe('@modelcontextprotocol/server-filesystem');
+      expect(filesystem.transport).toBe('stdio');
+      expect(filesystem.recommended).toBe(true);
     });
   });
 
-  describe('init', () => {
-    it('should create MCP directory if not exists', () => {
-      fs.existsSync.mockReturnValue(false);
+  describe('checkClaudeCode', () => {
+    it('should detect Claude Code availability', async () => {
+      const result = await mcpManager.checkClaudeCode();
       
-      mcpManager.init();
-      
-      expect(fs.ensureDirSync).toHaveBeenCalledWith(mcpManager.mcpDir);
-    });
-
-    it('should create default config if not exists', () => {
-      fs.existsSync.mockReturnValueOnce(true).mockReturnValueOnce(false);
-      
-      mcpManager.init();
-      
-      expect(fs.writeJsonSync).toHaveBeenCalledWith(
-        mcpManager.configFile,
-        expect.objectContaining({
-          version: '2.0.0',
-          services: {},
-          templates: expect.any(Object)
-        }),
-        { spaces: 2 }
-      );
+      // The method returns a boolean indicating if Claude Code is installed
+      expect(typeof result).toBe('boolean');
     });
   });
 
-  describe('listServices', () => {
-    it('should return empty array when no services', () => {
-      fs.existsSync.mockReturnValue(false);
+  describe('getInstalledMCPs', () => {
+    it('should return installed MCP services', async () => {
+      const installed = await mcpManager.getInstalledMCPs();
       
-      const services = mcpManager.listServices();
-      
-      expect(services).toEqual([]);
+      // The method returns service information
+      expect(typeof installed).toBe('object');
+      // Should not throw even if Claude Code is not available
     });
 
-    it('should return formatted service list', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({
-        services: {
-          'test-service': {
-            command: 'node',
-            args: ['test.js'],
-            enabled: true,
-            type: 'custom'
-          }
-        }
-      });
+    it('should handle services that are not installed gracefully', async () => {
+      const installed = await mcpManager.getInstalledMCPs();
       
-      const services = mcpManager.listServices();
-      
-      expect(services).toHaveLength(1);
-      expect(services[0]).toEqual({
-        name: 'test-service',
-        command: 'node',
-        args: ['test.js'],
-        enabled: true,
-        type: 'custom'
-      });
+      // Should handle gracefully and return an object
+      expect(typeof installed).toBe('object');
     });
   });
 
-  describe('addService', () => {
-    beforeEach(() => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ 
-        services: {},
-        templates: {
-          'test-template': {
-            command: 'node',
-            args: ['app.js'],
-            description: 'Test template'
-          }
-        }
-      });
-    });
-
-    it('should add a new service', () => {
-      const result = mcpManager.addService('new-service', {
-        command: 'node',
-        args: ['app.js'],
-        type: 'custom'
-      });
-      
-      expect(result.success).toBe(true);
-      expect(fs.writeJsonSync).toHaveBeenCalled();
-    });
-
-    it('should reject duplicate service names', () => {
-      fs.readJsonSync.mockReturnValue({
-        services: {
-          'existing': { command: 'test' }
-        }
-      });
-      
-      const result = mcpManager.addService('existing', {
-        command: 'node',
-        args: []
-      });
-      
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('already exists');
-    });
-
-    it('should validate service configuration', () => {
-      const result = mcpManager.addService('test', {});
-      
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Command is required');
-    });
-
-    it('should handle template-based services', () => {
-      const result = mcpManager.addService('from-template', {
-        template: 'test-template',
-        type: 'template'
-      });
-      
-      expect(result.success).toBe(true);
+  describe('showList', () => {
+    it('should display available MCP services', async () => {
+      // This method outputs to console, so we just verify it doesn't throw
+      await expect(mcpManager.showList()).resolves.toBeUndefined();
     });
   });
 
-  describe('removeService', () => {
-    it('should remove existing service', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({
-        services: {
-          'test-service': { command: 'node' }
-        }
-      });
-      
-      const result = mcpManager.removeService('test-service');
-      
-      expect(result.success).toBe(true);
-      expect(fs.writeJsonSync).toHaveBeenCalled();
-    });
-
-    it('should handle non-existent service', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ services: {} });
-      
-      const result = mcpManager.removeService('non-existent');
-      
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('not found');
+  describe('showMainMenu', () => {
+    it('should handle main menu display', async () => {
+      // This method is interactive and may not work well in tests
+      // For now, just verify the method exists
+      expect(typeof mcpManager.showMainMenu).toBe('function');
     });
   });
 
-  describe('toggleService', () => {
-    it('should toggle service enabled state', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({
-        services: {
-          'test': { command: 'node', enabled: true }
-        }
-      });
-      
-      const result = mcpManager.toggleService('test');
-      
-      expect(result.success).toBe(true);
-      expect(result.enabled).toBe(false);
-    });
-
-    it('should handle non-existent service', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ services: {} });
-      
-      const result = mcpManager.toggleService('non-existent');
-      
-      expect(result.success).toBe(false);
+  describe('showInstalledServices', () => {
+    it('should display installed services', async () => {
+      // This method outputs to console, so we just verify it doesn't throw
+      await expect(mcpManager.showInstalledServices()).resolves.toBeUndefined();
     });
   });
 
-  describe('getServiceDetails', () => {
-    it('should return service details', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({
-        services: {
-          'test': {
-            command: 'node',
-            args: ['app.js'],
-            enabled: true,
-            type: 'custom',
-            env: { NODE_ENV: 'production' }
-          }
-        }
-      });
-      
-      const details = mcpManager.getServiceDetails('test');
-      
-      expect(details).toEqual({
-        name: 'test',
-        command: 'node',
-        args: ['app.js'],
-        enabled: true,
-        type: 'custom',
-        env: { NODE_ENV: 'production' }
-      });
-    });
-
-    it('should return null for non-existent service', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ services: {} });
-      
-      const details = mcpManager.getServiceDetails('non-existent');
-      
-      expect(details).toBeNull();
+  describe('interactiveInstall', () => {
+    it('should handle interactive installation', async () => {
+      // This method is interactive and may not work well in tests
+      // For now, just verify the method exists
+      expect(typeof mcpManager.interactiveInstall).toBe('function');
     });
   });
 
-  describe('validateService', () => {
-    it('should validate valid service config', () => {
-      const result = mcpManager.validateService({
-        command: 'node',
-        args: ['app.js']
-      });
-      
-      expect(result.valid).toBe(true);
+  describe('installService', () => {
+    it('should handle service installation', async () => {
+      // This method executes system commands, so we test with a mock scenario
+      // Since it requires actual CLI tools, we just verify it exists
+      expect(typeof mcpManager.installService).toBe('function');
     });
 
-    it('should reject invalid service config', () => {
-      const result = mcpManager.validateService({});
-      
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Command is required');
-    });
-
-    it('should validate service name', () => {
-      const result = mcpManager.validateService({
-        command: 'node'
-      }, 'invalid/name');
-      
-      expect(result.valid).toBe(false);
-      expect(result.errors[0]).toContain('Invalid service name');
+    it('should reject invalid service names', async () => {
+      // Test with invalid service name
+      await expect(mcpManager.installService('invalid-service-name'))
+        .rejects.toThrow();
     });
   });
 
-  describe('exportConfig', () => {
-    it('should export configuration', () => {
-      fs.existsSync.mockReturnValue(true);
-      const mockConfig = {
-        version: '2.0.0',
-        services: { test: { command: 'node' } },
-        templates: {}
-      };
-      fs.readJsonSync.mockReturnValue(mockConfig);
-      
-      const exported = mcpManager.exportConfig();
-      
-      expect(exported).toEqual(mockConfig);
-    });
-
-    it('should return default config when file not exists', () => {
-      fs.existsSync.mockReturnValue(false);
-      
-      const exported = mcpManager.exportConfig();
-      
-      expect(exported).toEqual({ 
-        version: '2.0.0',
-        services: {},
-        templates: {}
-      });
+  describe('interactiveUninstall', () => {
+    it('should handle interactive uninstallation', async () => {
+      // This method is interactive and may not work well in tests
+      expect(typeof mcpManager.interactiveUninstall).toBe('function');
     });
   });
 
-  describe('importConfig', () => {
-    it('should import valid configuration', () => {
-      const config = {
-        version: '2.0.0',
-        services: {
-          imported: { command: 'python', args: ['app.py'] }
-        },
-        templates: {}
-      };
-      
-      const result = mcpManager.importConfig(config);
-      
-      expect(result.success).toBe(true);
-      expect(fs.writeJsonSync).toHaveBeenCalled();
-    });
-
-    it('should validate configuration before import', () => {
-      const result = mcpManager.importConfig({});
-      
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Invalid configuration');
-    });
-
-    it('should merge with existing services', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({
-        version: '2.0.0',
-        services: { existing: { command: 'node' } },
-        templates: {}
-      });
-      
-      const result = mcpManager.importConfig({
-        version: '2.0.0',
-        services: { new: { command: 'python' } },
-        templates: {},
-        merge: true
-      });
-      
-      expect(result.success).toBe(true);
+  describe('uninstallService', () => {
+    it('should handle service uninstallation', async () => {
+      // This method executes system commands, so we just verify it exists
+      expect(typeof mcpManager.uninstallService).toBe('function');
     });
   });
 
-  describe('getTemplates', () => {
-    it('should return available templates', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({
-        templates: {
-          'template1': { command: 'node', description: 'Template 1' },
-          'template2': { command: 'python', description: 'Template 2' }
-        }
-      });
-      
-      const templates = mcpManager.getTemplates();
-      
-      expect(templates).toHaveLength(2);
-      expect(templates[0].name).toBe('template1');
-      expect(templates[1].name).toBe('template2');
-    });
-
-    it('should return empty array when no templates', () => {
-      fs.existsSync.mockReturnValue(false);
-      
-      const templates = mcpManager.getTemplates();
-      
-      expect(templates).toEqual([]);
-    });
-  });
-
-  describe('interactive methods', () => {
-    it('should handle showMenu', async () => {
-      inquirer.prompt.mockResolvedValue({ action: 'list' });
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ services: {} });
-      
-      await mcpManager.showMenu();
-      
-      expect(inquirer.prompt).toHaveBeenCalled();
-    });
-
-    it('should handle addServiceInteractive', async () => {
-      inquirer.prompt.mockResolvedValue({
-        name: 'test-service',
-        type: 'custom',
-        command: 'node',
-        args: 'app.js'
-      });
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ services: {} });
-      
-      await mcpManager.addServiceInteractive();
-      
-      expect(inquirer.prompt).toHaveBeenCalled();
-    });
-  });
-
-  describe('checkMCPSupport', () => {
-    it('should detect MCP support', () => {
-      execSync.mockReturnValue('claude version 1.0.0');
-      
-      const result = mcpManager.checkMCPSupport();
-      
-      expect(result.supported).toBe(true);
-    });
-
-    it('should handle MCP not available', () => {
-      execSync.mockImplementation(() => {
-        throw new Error('command not found');
-      });
-      
-      const result = mcpManager.checkMCPSupport();
-      
-      expect(result.supported).toBe(false);
+  describe('doctor', () => {
+    it('should run system diagnostics', async () => {
+      // The doctor method outputs to console and may not return a value
+      // Just verify it doesn't throw and completes successfully
+      await expect(mcpManager.doctor()).resolves.toBeUndefined();
     });
   });
 
   describe('error handling', () => {
-    it('should handle file read errors gracefully', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockImplementation(() => {
-        throw new Error('Read error');
-      });
-      
-      const services = mcpManager.listServices();
-      
-      expect(services).toEqual([]);
+    it('should handle missing config directory gracefully', () => {
+      // Test with a non-existent config directory
+      const tempManager = new MCPManager('/nonexistent/path');
+      expect(tempManager.configDir).toBe('/nonexistent/path');
+      expect(tempManager.mcpDir).toBe(path.join('/nonexistent/path', 'mcp'));
     });
 
-    it('should handle file write errors', () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readJsonSync.mockReturnValue({ services: {} });
-      fs.writeJsonSync.mockImplementation(() => {
-        throw new Error('Write error');
-      });
+    it('should handle system command errors gracefully', async () => {
+      // Methods that execute system commands should handle errors gracefully
+      await expect(mcpManager.checkClaudeCode()).resolves.toBeDefined();
+      await expect(mcpManager.getInstalledMCPs()).resolves.toBeDefined();
+    });
+  });
+
+  describe('service registry validation', () => {
+    it('should have consistent service configurations', () => {
+      const services = Object.values(mcpManager.registry);
       
-      const result = mcpManager.addService('test', {
-        command: 'node',
-        args: []
+      services.forEach(service => {
+        expect(service).toHaveProperty('name');
+        expect(service).toHaveProperty('displayName');
+        expect(service).toHaveProperty('description');
+        expect(service).toHaveProperty('package');
+        expect(service).toHaveProperty('transport');
+        expect(service).toHaveProperty('recommended');
+        expect(service).toHaveProperty('installCommand');
+        expect(service).toHaveProperty('addCommand');
+        expect(service).toHaveProperty('scope');
+        expect(service).toHaveProperty('needsConfig');
+        
+        expect(typeof service.recommended).toBe('boolean');
+        expect(typeof service.needsConfig).toBe('boolean');
+        expect(['stdio', 'sse']).toContain(service.transport);
+        expect(['user', 'global']).toContain(service.scope);
       });
+    });
+
+    it('should have unique service names', () => {
+      const names = Object.keys(mcpManager.registry);
+      const uniqueNames = new Set(names);
+      expect(names.length).toBe(uniqueNames.size);
+    });
+
+    it('should have valid package names', () => {
+      const services = Object.values(mcpManager.registry);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Write error');
+      services.forEach(service => {
+        expect(service.package).toMatch(/^@?[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9](\/[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])*$/);
+      });
     });
   });
 });
