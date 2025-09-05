@@ -3,12 +3,75 @@
  * 
  * Generates shell aliases for Claude Code providers.
  * Enhanced with security validation, error handling, and shell compatibility.
+ * 
+ * @class
+ * @example
+ * const AliasGenerator = require('./AliasGenerator');
+ * const aliasGenerator = new AliasGenerator('/path/to/config');
+ * 
+ * // Generate aliases for all providers
+ * await aliasGenerator.generateAliases();
+ * 
+ * // Preview aliases without writing
+ * const preview = await aliasGenerator.previewAliases();
+ * console.log(preview);
  */
 
 const fs = require('fs-extra');
 const path = require('path');
 
+/**
+ * @typedef {Object} ProviderConfig
+ * @property {string} alias - Provider alias
+ * @property {string} baseURL - Provider base URL
+ * @property {string} apiKey - Provider API key
+ * @property {number} [timeout] - Request timeout
+ */
+
+/**
+ * @typedef {Object} AliasStats
+ * @property {number} totalProviders - Total number of providers
+ * @property {string[]} aliases - Array of provider aliases
+ * @property {string[]} baseURLs - Array of unique base URLs
+ * @property {Date|null} lastGenerated - Last generation timestamp
+ */
+
+/**
+ * @typedef {Object} EnhancedStats
+ * @property {number} totalProviders - Total number of providers
+ * @property {string[]} aliases - Array of provider aliases
+ * @property {string[]} baseURLs - Array of unique base URLs
+ * @property {Date|null} lastGenerated - Last generation timestamp
+ * @property {string} shellType - Detected shell type
+ * @property {boolean} shellCompatible - Whether shell is compatible
+ * @property {string} version - AliasGenerator version
+ * @property {Object} security - Security settings
+ * @property {number} security.maxAliasLength - Maximum alias length
+ * @property {boolean} security.validationEnabled - Whether validation is enabled
+ * @property {Object} file - File information
+ * @property {string} file.path - Aliases file path
+ * @property {boolean} file.exists - Whether aliases file exists
+ * @property {boolean} file.upToDate - Whether aliases file is up to date
+ * @property {number} file.size - Aliases file size in bytes
+ */
+
+/**
+ * @typedef {Object} ReloadResult
+ * @property {boolean} success - Whether reload was successful
+ * @property {string} [method] - Reload method used
+ * @property {string} [reason] - Reason for failure
+ */
+
 class AliasGenerator {
+  /**
+   * Create a new AliasGenerator instance
+   * 
+   * @param {string} configDir - Configuration directory path
+   * @throws {Error} If configDir is not provided
+   * 
+   * @example
+   * const aliasGenerator = new AliasGenerator('/home/user/.claude/ccvm');
+   */
   constructor(configDir) {
     this.configDir = configDir;
     this.providersDir = path.join(configDir, 'providers');
@@ -25,6 +88,14 @@ class AliasGenerator {
 
   /**
    * Generate aliases for all configured providers with enhanced security
+   * 
+   * @param {Object} [options] - Generation options
+   * @param {boolean} [options.autoReload=true] - Whether to automatically trigger shell reload
+   * @returns {Promise<void>}
+   * @throws {Error} If alias generation fails
+   * 
+   * @example
+   * await aliasGenerator.generateAliases({ autoReload: true });
    */
   async generateAliases(options = {}) {
     try {
@@ -61,6 +132,14 @@ class AliasGenerator {
 
   /**
    * Load all provider configurations
+   * 
+   * @returns {Promise<ProviderConfig[]>} Array of provider configurations sorted by alias
+   * 
+   * @example
+   * const providers = await aliasGenerator.loadProviders();
+   * providers.forEach(provider => {
+   *   console.log(`${provider.alias}: ${provider.baseURL}`);
+   * });
    */
   async loadProviders() {
     try {
@@ -93,6 +172,13 @@ class AliasGenerator {
 
   /**
    * Build the complete alias file content
+   * 
+   * @param {ProviderConfig[]} providers - Array of provider configurations
+   * @returns {Promise<string>} Complete alias file content
+   * 
+   * @example
+   * const content = await aliasGenerator.buildAliasContent(providers);
+   * console.log(content);
    */
   async buildAliasContent(providers) {
     const header = this.generateHeader();
@@ -106,6 +192,12 @@ class AliasGenerator {
 
   /**
    * Generate file header
+   * 
+   * @returns {string} File header content
+   * 
+   * @example
+   * const header = aliasGenerator.generateHeader();
+   * console.log(header);
    */
   generateHeader() {
     return `# Claude Code Kit - Auto-generated aliases
@@ -123,6 +215,12 @@ class AliasGenerator {
 
   /**
    * Generate enhanced helper functions with better error handling
+   * 
+   * @returns {string} Shell helper functions content
+   * 
+   * @example
+   * const helpers = aliasGenerator.generateHelperFunctions();
+   * console.log(helpers);
    */
   generateHelperFunctions() {
     return `# Claude Code Kit Helper Functions v${this.version}
@@ -368,6 +466,13 @@ _cc_claude_exec_dynamic() {
 
   /**
    * Generate aliases for providers (simplified - no individual aliases)
+   * 
+   * @param {ProviderConfig[]} providers - Array of provider configurations
+   * @returns {string} Provider aliases section content
+   * 
+   * @example
+   * const aliases = aliasGenerator.generateProviderAliases(providers);
+   * console.log(aliases);
    */
   generateProviderAliases(providers) {
     if (providers.length === 0) {
@@ -386,9 +491,41 @@ ${providerList}`;
 
   /**
    * Generate file footer
+   * 
+   * @param {ProviderConfig[]} providers - Array of provider configurations
+   * @returns {string} File footer content
+   * 
+   * @example
+   * const footer = aliasGenerator.generateFooter(providers);
+   * console.log(footer);
    */
+  generateFooter(providers) {
+    const providerCount = providers.length;
+
+    return `# Claude Code Kit - Simplified Configuration
+# Total providers configured: ${providerCount}
+#
+# Usage:
+#   claude "your message"              # Uses current default provider
+#
+# Management commands:
+#   ccvm list                          # List all providers
+#   ccvm use <alias>                   # Switch default provider  
+#   ccvm add                           # Add a new provider
+#   ccvm status                        # Show system status
+#
+# ✨ No manual reload needed - changes take effect immediately!
+# For more information: https://github.com/kedoupi/claude-code-kit`;
+  }
+
   /**
    * Generate default claude alias based on configuration
+   * 
+   * @returns {Promise<string>} Default claude alias definition
+   * 
+   * @example
+   * const defaultAlias = await aliasGenerator.generateDefaultClaudeAlias();
+   * console.log(defaultAlias);
    */
   async generateDefaultClaudeAlias() {
     try {
@@ -420,6 +557,18 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Validate alias name
+   * 
+   * @param {string} alias - Alias to validate
+   * @returns {void}
+   * @throws {Error} If alias is invalid
+   * 
+   * @example
+   * try {
+   *   aliasGenerator.validateAlias('my-provider');
+   *   console.log('Alias is valid');
+   * } catch (error) {
+   *   console.error('Invalid alias:', error.message);
+   * }
    */
   validateAlias(alias) {
     // Check for valid alias format
@@ -458,6 +607,13 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Get alias statistics
+   * 
+   * @returns {Promise<AliasStats>} Alias statistics
+   * 
+   * @example
+   * const stats = await aliasGenerator.getStats();
+   * console.log(`Total providers: ${stats.totalProviders}`);
+   * console.log(`Aliases: ${stats.aliases.join(', ')}`);
    */
   async getStats() {
     const providers = await this.loadProviders();
@@ -472,6 +628,14 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Get last generated timestamp
+   * 
+   * @returns {Promise<Date|null>} Last generation timestamp or null if never generated
+   * 
+   * @example
+   * const lastTime = await aliasGenerator.getLastGeneratedTime();
+   * if (lastTime) {
+   *   console.log('Last generated:', lastTime);
+   * }
    */
   async getLastGeneratedTime() {
     try {
@@ -488,6 +652,14 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Check if aliases file is up to date
+   * 
+   * @returns {Promise<boolean>} True if aliases file is up to date
+   * 
+   * @example
+   * const isCurrent = await aliasGenerator.isUpToDate();
+   * if (!isCurrent) {
+   *   console.log('Aliases need to be regenerated');
+   * }
    */
   async isUpToDate() {
     try {
@@ -518,6 +690,13 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Preview aliases without writing to file
+   * 
+   * @returns {Promise<string>} Complete alias file content
+   * 
+   * @example
+   * const preview = await aliasGenerator.previewAliases();
+   * console.log('Preview:');
+   * console.log(preview);
    */
   async previewAliases() {
     const providers = await this.loadProviders();
@@ -526,6 +705,9 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Detect shell type for compatibility
+   * 
+   * @private
+   * @returns {string} Detected shell type (zsh, bash, fish, dash, or unknown)
    */
   _detectShell() {
     const shell = process.env.SHELL || 'unknown';
@@ -681,6 +863,13 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Get enhanced statistics including shell compatibility
+   * 
+   * @returns {Promise<EnhancedStats>} Enhanced alias statistics
+   * 
+   * @example
+   * const stats = await aliasGenerator.getEnhancedStats();
+   * console.log(`Shell type: ${stats.shellType}`);
+   * console.log(`File size: ${stats.file.size} bytes`);
    */
   async getEnhancedStats() {
     const basicStats = await this.getStats();
@@ -720,6 +909,16 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Automatically trigger shell reload of aliases
+   * 
+   * @returns {Promise<ReloadResult>} Reload result
+   * 
+   * @example
+   * const result = await aliasGenerator.triggerShellReload();
+   * if (result.success) {
+   *   console.log('Reload successful');
+   * } else {
+   *   console.log('Reload failed:', result.reason);
+   * }
    */
   async triggerShellReload() {
     try {
@@ -738,6 +937,12 @@ alias claude='_cc_claude_exec_dynamic'`;
 
   /**
    * Create a shell integration hint file for better reload support
+   * 
+   * @returns {Promise<string>} Path to created hint file
+   * 
+   * @example
+   * const hintFile = await aliasGenerator.createShellIntegrationHint();
+   * console.log('Integration hint created:', hintFile);
    */
   async createShellIntegrationHint() {
     const hintFile = path.join(this.configDir, '.shell-integration');
