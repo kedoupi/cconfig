@@ -1,4 +1,4 @@
-const MCPManagerV2 = require('../../../src/core/MCPManagerV2');
+const MCPManager = require('../../../src/core/MCPManager');
 const fs = require('fs-extra');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -8,13 +8,13 @@ jest.mock('child_process');
 jest.mock('fs-extra');
 jest.mock('inquirer');
 
-describe('MCPManagerV2', () => {
+describe('MCPManager', () => {
   let mcpManager;
   const testConfigDir = '/test/.claude/ccvm';
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mcpManager = new MCPManagerV2(testConfigDir);
+    mcpManager = new MCPManager(testConfigDir);
     
     // Default mocks
     fs.existsSync.mockReturnValue(false);

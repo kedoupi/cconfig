@@ -23,7 +23,7 @@ const ConfigManager = require('../src/core/ConfigManager');
 const ProviderManager = require('../src/core/ProviderManager');
 const BackupManager = require('../src/core/BackupManager');
 const AliasGenerator = require('../src/core/AliasGenerator');
-const MCPManagerV2 = require('../src/core/MCPManagerV2');
+const MCPManager = require('../src/core/MCPManager');
 
 // Import utilities
 const { displayBanner, displayBannerWithInfo, displayWelcome, displaySuccessBanner, displayErrorBanner } = require('../src/utils/banner');
@@ -36,7 +36,7 @@ const CONFIG_DIR = path.join(CLAUDE_DIR, 'ccvm');
 const configManager = new ConfigManager(CONFIG_DIR);
 const providerManager = new ProviderManager(CONFIG_DIR);
 const backupManager = new BackupManager(CONFIG_DIR, CLAUDE_DIR);
-const mcpManager = new MCPManagerV2(CONFIG_DIR);
+const mcpManager = new MCPManager(CONFIG_DIR);
 // Note: AliasGenerator removed - using direct claude command integration
 
 // Main CLI program

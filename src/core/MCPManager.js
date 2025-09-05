@@ -12,7 +12,7 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const { execSync } = require('child_process');
 
-class MCPManagerV2 {
+class MCPManager {
   constructor(configDir) {
     this.configDir = configDir;
     
@@ -604,4 +604,4 @@ class MCPManagerV2 {
   }
 }
 
-module.exports = MCPManagerV2;
+module.exports = MCPManager;
