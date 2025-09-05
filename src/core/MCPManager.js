@@ -18,6 +18,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const { execSync } = require('child_process');
 const chalk = require('chalk');
 const Table = require('cli-table3');
 const inquirer = require('inquirer');
@@ -135,6 +136,18 @@ class MCPManager {
         needsConfig: false,
         requiresPython: true,
         note: '需要 Python 3.12+ 和 UV 包管理器'
+      },
+      'context7': {
+        name: 'context7',
+        displayName: 'Context7 MCP',
+        description: 'Upstash Context7 MCP 服务，提供上下文管理功能',
+        package: '@upstash/context7-mcp@latest',
+        transport: 'stdio',
+        recommended: true,
+        installCommand: 'npm install -g @upstash/context7-mcp@latest',
+        addCommand: 'claude mcp add context7 npx -- -y @upstash/context7-mcp@latest',
+        scope: 'user',
+        needsConfig: false
       }
     };
   }
