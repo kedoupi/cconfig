@@ -8,12 +8,176 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const Logger = require('./logger');
+const errorCodes = require('./errorCodes');
 
+/**
+ * 统一错误处理器
+ * 提供一致的错误处理模式，包括错误分类、恢复建议和日志记录
+ * 支持实例化和静态方法两种使用方式
+ * 
+ * @class
+ * @example
+ * const ErrorHandler = require('./errorHandler');
+ * 
+ * // 使用静态方法
+ * const handledError = ErrorHandler.handle(error, 'operation');
+ * 
+ * // 使用实例方法
+ * const errorHandler = new ErrorHandler();
+ * await errorHandler.handleError(error, context);
+ */
 class ErrorHandler {
-  constructor() {
-    this.logFile = path.join(os.homedir(), '.claude', 'ccvm', 'error.log');
-    this.maxLogSize = 10 * 1024 * 1024; // 10MB
-    this.maxLogFiles = 3;
+  /**
+   * 默认配置
+   * @type {Object}
+   * @private
+   */
+  static #defaultConfig = {
+    logFile: path.join(os.homedir(), '.claude', 'ccvm', 'error.log'),
+    maxLogSize: 10 * 1024 * 1024, // 10MB
+    maxLogFiles: 3,
+    autoRotate: true
+  };
+
+  /**
+   * 错误类型映射
+   * @type {Object.<string, string>}
+   * @private
+   */
+  static #errorTypes = {
+    'ENOENT': 'FILE_NOT_FOUND',
+    'EACCES': 'PERMISSION_DENIED',
+    'EISDIR': 'INVALID_PATH',
+    'ENOTDIR': 'INVALID_PATH',
+    'EEXIST': 'FILE_EXISTS',
+    'ENOSPC': 'DISK_FULL',
+    'EPERM': 'PERMISSION_DENIED',
+    'EINVAL': 'INVALID_ARGUMENT',
+    'ENOTFOUND': 'NETWORK_ERROR',
+    'ECONNREFUSED': 'NETWORK_ERROR',
+    'ETIMEDOUT': 'TIMEOUT_ERROR',
+    'EAI_AGAIN': 'NETWORK_ERROR'
+  };
+
+  constructor(config = {}) {
+    this.config = { ...ErrorHandler.#defaultConfig, ...config };
+    this.logFile = this.config.logFile;
+  }
+
+  /**
+   * 静态方法：处理错误并返回标准化的错误信息
+   * 
+   * @param {Error|string} error - 原始错误或错误消息
+   * @param {string} [operation=''] - 操作名称，用于上下文信息
+   * @param {Object} [context={}] - 上下文信息
+   * @returns {Object} 标准化的错误对象
+   * 
+   * @example
+   * try {
+   *   await someOperation();
+   * } catch (error) {
+   *   const handledError = ErrorHandler.handle(error, 'someOperation');
+   *   console.error(handledError.message);
+   * }
+   */
+  static handle(error, operation = '', context = {}) {
+    const errorObj = error instanceof Error ? error : new Error(error);
+    const errorCode = ErrorHandler.#determineErrorCode(errorObj);
+    const errorInfo = errorCodes[errorCode] || errorCodes.UNKNOWN_ERROR;
+    
+    const handledError = {
+      code: errorCode,
+      message: errorInfo.message || errorObj.message,
+      originalError: errorObj,
+      operation,
+      context,
+      severity: errorInfo.severity || 'medium',
+      suggestion: errorInfo.suggestion || ErrorHandler.#generateGenericSuggestion(errorCode),
+      timestamp: new Date().toISOString(),
+      recoverable: errorInfo.recoverable !== false
+    };
+
+    // 记录错误日志
+    ErrorHandler.#logErrorStatic(handledError);
+
+    return handledError;
+  }
+
+  /**
+   * 静态方法：创建自定义错误
+   * 
+   * @param {string} code - 错误代码
+   * @param {string} message - 错误消息
+   * @param {Object} [context={}] - 上下文信息
+   * @returns {Error} 创建的错误对象
+   */
+  static createError(code, message, context = {}) {
+    const error = new Error(message);
+    error.code = code;
+    error.context = context;
+    error.timestamp = new Date().toISOString();
+    return error;
+  }
+
+  /**
+   * 静态方法：包装异步函数，提供统一的错误处理
+   * 
+   * @param {Function} fn - 要包装的异步函数
+   * @param {string} [operation=''] - 操作名称
+   * @returns {Function} 包装后的函数
+   */
+  static wrapAsync(fn, operation = '') {
+    return async (...args) => {
+      try {
+        return await fn(...args);
+      } catch (error) {
+        const handledError = ErrorHandler.handle(error, operation, { args });
+        throw ErrorHandler.createError(
+          handledError.code,
+          handledError.message,
+          handledError.context
+        );
+      }
+    };
+  }
+
+  /**
+   * 静态方法：判断错误是否可恢复
+   * 
+   * @param {Error|Object} error - 错误对象
+   * @returns {boolean} 是否可恢复
+   */
+  static isRecoverable(error) {
+    const errorCode = error.code || ErrorHandler.#determineErrorCode(error);
+    const errorInfo = errorCodes[errorCode];
+    return errorInfo ? errorInfo.recoverable !== false : true;
+  }
+
+  /**
+   * 静态方法：格式化错误消息用于用户显示
+   * 
+   * @param {Error|Object} error - 错误对象
+   * @param {boolean} [includeSuggestion=true] - 是否包含建议
+   * @returns {string} 格式化的错误消息
+   */
+  static formatError(error, includeSuggestion = true) {
+    const handledError = ErrorHandler.handle(error);
+    let message = `❌ ${handledError.message}`;
+    
+    if (handledError.operation) {
+      message += `\n操作: ${handledError.operation}`;
+    }
+    
+    if (includeSuggestion && handledError.suggestion) {
+      message += `\n💡 建议: ${handledError.suggestion}`;
+    }
+    
+    if (handledError.severity === 'high') {
+      message += '\n⚠️ 这是一个严重错误，可能需要立即处理。';
+    }
+    
+    return message;
   }
 
   /**
@@ -389,6 +553,84 @@ class ErrorHandler {
     }
 
     return options;
+  }
+
+  /**
+   * 确定错误代码
+   * 
+   * @param {Error} error - 错误对象
+   * @returns {string} 错误代码
+   * @private
+   */
+  static #determineErrorCode(error) {
+    if (error.code && ErrorHandler.#errorTypes[error.code]) {
+      return ErrorHandler.#errorTypes[error.code];
+    }
+    
+    if (error.code && errorCodes[error.code]) {
+      return error.code;
+    }
+    
+    // 根据错误消息推断错误类型
+    const message = error.message.toLowerCase();
+    if (message.includes('timeout')) return 'TIMEOUT_ERROR';
+    if (message.includes('permission') || message.includes('denied')) return 'PERMISSION_DENIED';
+    if (message.includes('not found') || message.includes('no such file')) return 'FILE_NOT_FOUND';
+    if (message.includes('network') || message.includes('connection')) return 'NETWORK_ERROR';
+    if (message.includes('validation') || message.includes('invalid')) return 'VALIDATION_ERROR';
+    if (message.includes('configuration') || message.includes('config')) return 'CONFIG_ERROR';
+    
+    return 'UNKNOWN_ERROR';
+  }
+
+  /**
+   * 生成通用建议
+   * 
+   * @param {string} errorCode - 错误代码
+   * @returns {string} 建议消息
+   * @private
+   */
+  static #generateGenericSuggestion(errorCode) {
+    const suggestions = {
+      'FILE_NOT_FOUND': '请检查文件路径是否正确，或创建必要的文件。',
+      'PERMISSION_DENIED': '请检查文件权限，或使用适当的权限运行程序。',
+      'NETWORK_ERROR': '请检查网络连接，或稍后重试。',
+      'TIMEOUT_ERROR': '操作超时，请增加超时时间或检查网络状况。',
+      'VALIDATION_ERROR': '请检查输入数据是否符合要求。',
+      'CONFIG_ERROR': '请检查配置文件格式和内容是否正确。',
+      'UNKNOWN_ERROR': '发生未知错误，请查看详细错误信息并联系支持团队。'
+    };
+    
+    return suggestions[errorCode] || '请检查错误详情并尝试相应解决方法。';
+  }
+
+  /**
+   * 静态错误日志记录
+   * 
+   * @param {Object} handledError - 处理后的错误对象
+   * @private
+   */
+  static #logErrorStatic(handledError) {
+    const logMethod = handledError.severity === 'high' ? 'error' : 
+                     handledError.severity === 'medium' ? 'warn' : 'info';
+    
+    Logger[logMethod](
+      `${handledError.operation || 'Operation'} failed: ${handledError.message}`,
+      {
+        code: handledError.code,
+        severity: handledError.severity,
+        context: handledError.context,
+        timestamp: handledError.timestamp
+      }
+    );
+
+    // 在调试模式下记录完整错误堆栈
+    if (process.env.DEBUG && handledError.originalError?.stack) {
+      Logger.debug('Full error stack:', {
+        stack: handledError.originalError.stack,
+        operation: handledError.operation
+      });
+    }
   }
 }
 

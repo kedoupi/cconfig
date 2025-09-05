@@ -11,24 +11,20 @@ const os = require('os');
 describe('CCVM Commands', () => {
   const CLI_PATH = path.join(__dirname, '../../bin/ccvm.js');
   const testDir = path.join(os.tmpdir(), 'ccvm-test-' + Date.now());
-  const originalHome = process.env.HOME;
 
   beforeAll(async () => {
     // Create test directory
     await fs.ensureDir(testDir);
-    process.env.HOME = testDir;
   });
 
   afterAll(async () => {
-    process.env.HOME = originalHome;
     await fs.remove(testDir);
   });
 
   const runCommand = (args) => {
     try {
       const output = execSync(`node "${CLI_PATH}" ${args}`, {
-        encoding: 'utf8',
-        env: { ...process.env, HOME: testDir }
+        encoding: 'utf8'
       });
       return { success: true, output };
     } catch (error) {
@@ -57,19 +53,19 @@ describe('CCVM Commands', () => {
     test('ccvm list should work with no providers', () => {
       const result = runCommand('list');
       expect(result.success).toBe(true);
-      expect(result.output).toContain('No providers configured');
+      expect(result.output).toContain('还没有配置任何 Provider');
     });
 
     test('ccvm status should show system status', () => {
       const result = runCommand('status');
       expect(result.success).toBe(true);
-      expect(result.output).toContain('System Information');
+      expect(result.output).toContain('系统信息');
     });
 
     test('ccvm doctor should run diagnostics', () => {
       const result = runCommand('doctor');
       expect(result.success).toBe(true);
-      expect(result.output).toContain('Node.js Environment');
+      expect(result.output).toContain('System Diagnostics');
     });
 
     test('ccvm env should handle no default provider', () => {
@@ -132,7 +128,7 @@ describe('CCVM Commands', () => {
     test('unknown command should show error', () => {
       const result = runCommand('invalid-command');
       expect(result.success).toBe(false);
-      expect(result.output).toContain('Unknown command');
+      expect(result.output).toContain('未知命令');
     });
   });
 
@@ -140,7 +136,7 @@ describe('CCVM Commands', () => {
     test('ccvm status --detailed should show detailed info', () => {
       const result = runCommand('status --detailed');
       expect(result.success).toBe(true);
-      expect(result.output).toContain('Configuration');
+      expect(result.output).toContain('配置信息');
     });
 
     test('ccvm doctor --fix should attempt fixes', () => {

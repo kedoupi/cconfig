@@ -120,7 +120,7 @@ describe('AliasGenerator', () => {
       
       const content = await fs.readFile(aliasesFile, 'utf8');
       expect(content).toContain('# No providers configured yet');
-      expect(content).toContain('cc-config provider add');
+      expect(content).toContain('ccvm add');
     });
   });
 

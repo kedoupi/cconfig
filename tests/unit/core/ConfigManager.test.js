@@ -24,7 +24,11 @@ describe('ConfigManager', () => {
   describe('constructor', () => {
     it('should initialize with correct paths', () => {
       expect(configManager.getConfigDir()).toBe(testConfigDir);
-      expect(configManager.getClaudeDir()).toBe(path.join(os.homedir(), '.claude'));
+      // 在测试模式下，claudeDir 应该指向测试环境
+      const expectedClaudeDir = process.env.CCVM_TEST_MODE === 'true' 
+        ? path.join(process.env.HOME || os.tmpdir(), '.claude')
+        : path.join(os.homedir(), '.claude');
+      expect(configManager.getClaudeDir()).toBe(expectedClaudeDir);
       expect(configManager.getProvidersDir()).toBe(path.join(testConfigDir, 'providers'));
       expect(configManager.getBackupsDir()).toBe(path.join(testConfigDir, 'backups'));
     });

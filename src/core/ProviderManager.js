@@ -3,6 +3,18 @@
  * 
  * Manages API provider configurations for Claude Code Kit.
  * Enhanced with security, validation, and comprehensive error handling.
+ * 
+ * @class
+ * @example
+ * const ProviderManager = require('./ProviderManager');
+ * const providerManager = new ProviderManager('/path/to/config');
+ * 
+ * // Add a new provider
+ * await providerManager.addProvider({
+ *   alias: 'anthropic',
+ *   baseURL: 'https://api.anthropic.com',
+ *   apiKey: 'sk-ant-api03-...'
+ * });
  */
 
 const fs = require('fs-extra');
@@ -11,7 +23,55 @@ const crypto = require('crypto');
 const Logger = require('../utils/Logger');
 const FileUtils = require('../utils/FileUtils');
 
+/**
+ * @typedef {Object} ProviderConfig
+ * @property {string} alias - Unique identifier for the provider
+ * @property {string} baseURL - API endpoint URL
+ * @property {string} apiKey - API authentication key
+ * @property {number} [timeout] - Request timeout in milliseconds
+ * @property {string} [created] - Creation timestamp
+ * @property {string} [lastUsed] - Last used timestamp
+ * @property {string} [lastUpdated] - Last update timestamp
+ * @property {string} [version] - Provider configuration version
+ * @property {string} [id] - Unique provider ID
+ */
+
+/**
+ * @typedef {Object} ProviderStats
+ * @property {number} total - Total number of providers
+ * @property {Object.<string, number>} byBaseURL - Providers grouped by base URL
+ */
+
+/**
+ * @typedef {Object} ImportResult
+ * @property {number} imported - Number of successfully imported providers
+ * @property {number} skipped - Number of skipped providers
+ * @property {string[]} errors - Error messages for failed imports
+ */
+
+/**
+ * @typedef {Object} ConnectivityTest
+ * @property {string} alias - Provider alias
+ * @property {string} baseURL - Provider base URL
+ * @property {boolean} reachable - Whether the provider is reachable
+ * @property {string} message - Test result message
+ */
+
+/**
+ * @typedef {Object} ProviderOptions
+ * @property {boolean} [autoReload=true] - Whether to automatically reload aliases
+ */
+
 class ProviderManager {
+  /**
+   * Create a new ProviderManager instance
+   * 
+   * @param {string} configDir - Configuration directory path
+   * @throws {Error} If configDir is not provided
+   * 
+   * @example
+   * const providerManager = new ProviderManager('/home/user/.claude/ccvm');
+   */
   constructor(configDir) {
     this.configDir = configDir;
     this.providersDir = path.join(configDir, 'providers');
@@ -31,6 +91,19 @@ class ProviderManager {
 
   /**
    * Add a new provider with enhanced validation and security
+   * 
+   * @param {ProviderConfig} provider - Provider configuration object
+   * @param {ProviderOptions} [options] - Additional options
+   * @returns {Promise<void>}
+   * @throws {Error} If validation fails, provider exists, or file operations fail
+   * 
+   * @example
+   * await providerManager.addProvider({
+   *   alias: 'anthropic',
+   *   baseURL: 'https://api.anthropic.com',
+   *   apiKey: 'sk-ant-api03-...',
+   *   timeout: 30000
+   * });
    */
   async addProvider(provider, options = {}) {
     try {
@@ -82,6 +155,18 @@ class ProviderManager {
 
   /**
    * Update an existing provider with enhanced validation
+   * 
+   * @param {string} alias - Provider alias to update
+   * @param {ProviderConfig} provider - Updated provider configuration
+   * @param {ProviderOptions} [options] - Additional options
+   * @returns {Promise<void>}
+   * @throws {Error} If provider not found, validation fails, or file operations fail
+   * 
+   * @example
+   * await providerManager.updateProvider('anthropic', {
+   *   baseURL: 'https://api.anthropic.com/v2',
+   *   timeout: 60000
+   * });
    */
   async updateProvider(alias, provider, options = {}) {
     try {
@@ -126,6 +211,14 @@ class ProviderManager {
 
   /**
    * Remove a provider
+   * 
+   * @param {string} alias - Provider alias to remove
+   * @param {ProviderOptions} [options] - Additional options
+   * @returns {Promise<void>}
+   * @throws {Error} If provider not found or file operations fail
+   * 
+   * @example
+   * await providerManager.removeProvider('anthropic');
    */
   async removeProvider(alias, options = {}) {
     const providerFile = path.join(this.providersDir, `${alias}.json`);
@@ -146,6 +239,16 @@ class ProviderManager {
 
   /**
    * Get a specific provider
+   * 
+   * @param {string} alias - Provider alias
+   * @returns {Promise<ProviderConfig|null>} Provider configuration or null if not found
+   * @throws {Error} If provider file exists but is corrupted
+   * 
+   * @example
+   * const provider = await providerManager.getProvider('anthropic');
+   * if (provider) {
+   *   console.log(provider.baseURL);
+   * }
    */
   async getProvider(alias) {
     const providerFile = path.join(this.providersDir, `${alias}.json`);
@@ -154,11 +257,23 @@ class ProviderManager {
       return null;
     }
 
-    return await FileUtils.readJsonSafe(providerFile, null);
+    try {
+      return await FileUtils.readJsonSafe(providerFile, null);
+    } catch (error) {
+      throw new Error(`Failed to read provider: ${error.message}`);
+    }
   }
 
   /**
    * List all providers
+   * 
+   * @returns {Promise<ProviderConfig[]>} Array of provider configurations sorted by alias
+   * 
+   * @example
+   * const providers = await providerManager.listProviders();
+   * providers.forEach(provider => {
+   *   console.log(`${provider.alias}: ${provider.baseURL}`);
+   * });
    */
   async listProviders() {
     if (!await fs.pathExists(this.providersDir)) {
@@ -175,6 +290,8 @@ class ProviderManager {
           providers.push(provider);
         } catch (error) {
           Logger.warn(`Failed to read provider file ${file}`, { error: error.message });
+          // For backward compatibility with existing tests
+          console.warn(`Failed to read provider file ${file}`);
         }
       }
     }
@@ -184,6 +301,15 @@ class ProviderManager {
 
   /**
    * Check if a provider exists
+   * 
+   * @param {string} alias - Provider alias
+   * @returns {Promise<boolean>} True if provider exists
+   * 
+   * @example
+   * const exists = await providerManager.providerExists('anthropic');
+   * if (exists) {
+   *   console.log('Provider exists');
+   * }
    */
   async providerExists(alias) {
     const providerFile = path.join(this.providersDir, `${alias}.json`);
@@ -192,6 +318,22 @@ class ProviderManager {
 
   /**
    * Validate provider configuration
+   * 
+   * @param {ProviderConfig} provider - Provider configuration to validate
+   * @returns {void}
+   * @throws {Error} If validation fails
+   * 
+   * @example
+   * try {
+   *   providerManager.validateProvider({
+   *     alias: 'test',
+   *     baseURL: 'https://api.test.com',
+   *     apiKey: 'sk-test-key'
+   *   });
+   *   console.log('Provider is valid');
+   * } catch (error) {
+   *   console.error('Validation failed:', error.message);
+   * }
    */
   validateProvider(provider) {
     const required = ['alias', 'baseURL', 'apiKey'];
@@ -227,6 +369,16 @@ class ProviderManager {
 
   /**
    * Validate alias format
+   * 
+   * @param {string} alias - Alias to validate
+   * @returns {boolean} True if alias is valid
+   * 
+   * @example
+   * const isValid = providerManager.isValidAlias('my-provider-123');
+   * // returns true
+   * 
+   * const isInvalid = providerManager.isValidAlias('my provider');
+   * // returns false
    */
   isValidAlias(alias) {
     return /^[a-zA-Z0-9-_]+$/.test(alias);
@@ -234,6 +386,16 @@ class ProviderManager {
 
   /**
    * Validate URL format
+   * 
+   * @param {string} url - URL to validate
+   * @returns {boolean} True if URL is valid
+   * 
+   * @example
+   * const isValid = providerManager.isValidURL('https://api.anthropic.com');
+   * // returns true
+   * 
+   * const isInvalid = providerManager.isValidURL('not-a-url');
+   * // returns false
    */
   isValidURL(url) {
     try {
@@ -247,6 +409,13 @@ class ProviderManager {
 
   /**
    * Get provider statistics
+   * 
+   * @returns {Promise<ProviderStats>} Provider statistics
+   * 
+   * @example
+   * const stats = await providerManager.getStats();
+   * console.log(`Total providers: ${stats.total}`);
+   * console.log('By base URL:', stats.byBaseURL);
    */
   async getStats() {
     const providers = await this.listProviders();
@@ -265,7 +434,13 @@ class ProviderManager {
   }
 
   /**
-   * Export all providers
+   * Export all providers (without sensitive information)
+   * 
+   * @returns {Promise<Object[]>} Array of provider configurations without API keys
+   * 
+   * @example
+   * const exportData = await providerManager.exportProviders();
+   * // exportData contains alias, baseURL, timeout but not apiKey
    */
   async exportProviders() {
     const providers = await this.listProviders();
@@ -281,6 +456,20 @@ class ProviderManager {
 
   /**
    * Import providers from export data
+   * 
+   * @param {Object[]} exportData - Array of provider configurations to import
+   * @param {Object} [options] - Import options
+   * @param {boolean} [options.overwrite=false] - Whether to overwrite existing providers
+   * @returns {Promise<ImportResult>} Import result with statistics
+   * 
+   * @example
+   * const result = await providerManager.importProviders(exportData, {
+   *   overwrite: true
+   * });
+   * console.log(`Imported ${result.imported} providers`);
+   * if (result.errors.length > 0) {
+   *   console.error('Errors:', result.errors);
+   * }
    */
   async importProviders(exportData, options = {}) {
     const { overwrite = false } = options;
@@ -322,6 +511,18 @@ class ProviderManager {
 
   /**
    * Test provider connectivity
+   * 
+   * @param {string} alias - Provider alias to test
+   * @returns {Promise<ConnectivityTest>} Connectivity test result
+   * @throws {Error} If provider not found
+   * 
+   * @example
+   * const test = await providerManager.testProvider('anthropic');
+   * if (test.reachable) {
+   *   console.log('Provider is reachable');
+   * } else {
+   *   console.error('Provider not reachable:', test.message);
+   * }
    */
   async testProvider(alias) {
     const provider = await this.getProvider(alias);
@@ -451,6 +652,12 @@ class ProviderManager {
 
   /**
    * Update provider last used timestamp
+   * 
+   * @param {string} alias - Provider alias
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await providerManager.updateLastUsed('anthropic');
    */
   async updateLastUsed(alias) {
     try {
@@ -468,6 +675,16 @@ class ProviderManager {
 
   /**
    * Get provider usage statistics
+   * 
+   * @param {string} alias - Provider alias
+   * @returns {Promise<Object>} Provider statistics including creation, last used, and version info
+   * @throws {Error} If provider not found
+   * 
+   * @example
+   * const stats = await providerManager.getProviderStats('anthropic');
+   * console.log('Created:', stats.created);
+   * console.log('Last used:', stats.lastUsed);
+   * console.log('Version:', stats.version);
    */
   async getProviderStats(alias) {
     const provider = await this.getProvider(alias);

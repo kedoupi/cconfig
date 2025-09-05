@@ -3,6 +3,10 @@
  * 
  * Manages the overall configuration system for Claude Code Kit.
  * Enhanced with comprehensive error handling, validation, and recovery mechanisms.
+ * 
+ * @class
+ * @author CCVM Team
+ * @version 1.0.0
  */
 
 const fs = require('fs-extra');
@@ -11,15 +15,89 @@ const os = require('os');
 const Logger = require('../utils/Logger');
 const FileUtils = require('../utils/FileUtils');
 
+/**
+ * 安全配置目录获取
+ * 在测试模式下返回安全的配置目录，防止操作实际用户数据
+ * @param {string} customDir - 自定义配置目录
+ * @returns {string} 安全的配置目录路径
+ */
+function getSafeConfigDir(customDir) {
+  // 如果在测试模式，确保配置目录在测试环境中
+  if (process.env.CCVM_TEST_MODE === 'true') {
+    const testHome = process.env.HOME || os.tmpdir();
+    const realHome = os.homedir();
+    
+    // 如果提供了自定义目录且是绝对路径，直接使用
+    if (customDir && path.isAbsolute(customDir)) {
+      return customDir;
+    }
+    
+    // 如果提供了自定义目录且指向真实用户目录，映射到测试环境
+    if (customDir && customDir.startsWith(realHome)) {
+      const relativePath = path.relative(realHome, customDir);
+      return path.join(testHome, relativePath);
+    }
+    
+    // 使用测试环境中的配置目录
+    return customDir || path.join(testHome, '.claude', 'ccvm');
+  }
+  
+  // 正常模式：使用提供的目录或默认目录
+  return customDir || path.join(os.homedir(), '.claude', 'ccvm');
+}
+
+/**
+ * @typedef {Object} ConfigManagerOptions
+ * @property {string} configDir - Configuration directory path
+ */
+
+/**
+ * @typedef {Object} SystemInfo
+ * @property {string} version - CCVM version
+ * @property {string} nodeVersion - Node.js version
+ * @property {string} platform - Operating system platform
+ * @property {string} arch - System architecture
+ * @property {boolean} initialized - Whether system is initialized
+ * @property {string} installPath - Installation path
+ * @property {string} configDir - Configuration directory
+ * @property {string} claudeDir - Claude directory
+ */
+
+/**
+ * @typedef {Object} ValidationResult
+ * @property {boolean} valid - Whether configuration is valid
+ * @property {string[]} issues - List of validation issues
+ * @property {Object} details - Detailed validation results
+ */
+
+/**
+ * @typedef {Object} LockInfo
+ * @property {string} pid - Process ID that holds the lock
+ * @property {string} operation - Operation being performed
+ * @property {string} created - When the lock was created
+ * @property {string} host - Hostname where lock was created
+ */
+
 class ConfigManager {
+  /**
+   * Create a new ConfigManager instance
+   * @param {string} [configDir=path.join(os.homedir(), '.claude', 'ccvm')] - Configuration directory path
+   * @returns {ConfigManager}
+   */
   constructor(configDir = path.join(os.homedir(), '.claude', 'ccvm')) {
-    this.configDir = configDir;
-    this.claudeDir = path.join(os.homedir(), '.claude');
-    this.providersDir = path.join(configDir, 'providers');
-    this.backupsDir = path.join(configDir, 'backups');
-    this.aliasesFile = path.join(configDir, 'aliases.sh');
-    this.lockFile = path.join(configDir, '.lock');
-    this.configFile = path.join(configDir, 'config.json');
+    // 使用安全的配置目录
+    this.configDir = getSafeConfigDir(configDir);
+    
+    // 在测试模式下，claudeDir 也应该在测试环境中
+    const homeDir = process.env.CCVM_TEST_MODE === 'true' 
+      ? (process.env.HOME || os.tmpdir())
+      : os.homedir();
+    this.claudeDir = path.join(homeDir, '.claude');
+    this.providersDir = path.join(this.configDir, 'providers');
+    this.backupsDir = path.join(this.configDir, 'backups');
+    this.aliasesFile = path.join(this.configDir, 'aliases.sh');
+    this.lockFile = path.join(this.configDir, '.lock');
+    this.configFile = path.join(this.configDir, 'config.json');
     
     // Default configuration (simplified - only actual used fields)
     this.defaultConfig = {
@@ -33,6 +111,8 @@ class ConfigManager {
 
   /**
    * Initialize the configuration system with comprehensive error handling
+   * @returns {Promise<void>}
+   * @throws {Error} When initialization fails
    */
   async init() {
     try {
@@ -47,6 +127,8 @@ class ConfigManager {
 
   /**
    * Perform the actual initialization steps
+   * @returns {Promise<void>}
+   * @private
    */
   async _performInitialization() {
     await this._setupEnvironment();
@@ -56,6 +138,8 @@ class ConfigManager {
 
   /**
    * Setup the environment (directories and files)
+   * @returns {Promise<void>}
+   * @private
    */
   async _setupEnvironment() {
     await this.ensureDirectories();
@@ -64,6 +148,8 @@ class ConfigManager {
 
   /**
    * Validate configuration and attempt repairs if needed
+   * @returns {Promise<void>}
+   * @private
    */
   async _validateAndRepair() {
     const validation = await this.validateConfiguration();
@@ -75,6 +161,8 @@ class ConfigManager {
 
   /**
    * Update initialization status
+   * @returns {Promise<void>}
+   * @private
    */
   async _updateInitStatus() {
     await this._updateConfig({ 
@@ -85,6 +173,8 @@ class ConfigManager {
 
   /**
    * Acquire initialization lock
+   * @returns {Promise<void>}
+   * @private
    */
   async _acquireInitLock() {
     await this._checkLock();
@@ -93,6 +183,9 @@ class ConfigManager {
   
   /**
    * Check for existing lock to prevent concurrent operations
+   * @returns {Promise<void>}
+   * @throws {Error} When configuration is locked by another process
+   * @private
    */
   async _checkLock() {
     // Ensure config directory exists before checking lock
@@ -139,6 +232,8 @@ class ConfigManager {
 
   /**
    * Ensure all required directories exist with proper permissions
+   * @returns {Promise<void>}
+   * @throws {Error} When directory creation fails
    */
   async ensureDirectories() {
     const directories = [
@@ -163,6 +258,10 @@ class ConfigManager {
 
   /**
    * Verify directory is writable
+   * @param {string} dirPath - Directory path to verify
+   * @returns {Promise<void>}
+   * @throws {Error} When directory is not writable
+   * @private
    */
   async _verifyWritable(dirPath) {
     const testFile = path.join(dirPath, '.write-test');
@@ -172,6 +271,8 @@ class ConfigManager {
 
   /**
    * Ensure all required files exist with proper content and validation
+   * @returns {Promise<void>}
+   * @throws {Error} When file creation or validation fails
    */
   async ensureFiles() {
     const files = [
@@ -292,12 +393,20 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
   /**
    * Get configuration directory path
    */
+  /**
+   * Get configuration directory path
+   * @returns {string} Configuration directory path
+   */
   getConfigDir() {
     return this.configDir;
   }
 
   /**
    * Get Claude directory path
+   */
+  /**
+   * Get Claude directory path
+   * @returns {string} Claude directory path
    */
   getClaudeDir() {
     return this.claudeDir;
@@ -306,12 +415,20 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
   /**
    * Get providers directory path
    */
+  /**
+   * Get providers directory path
+   * @returns {string} Providers directory path
+   */
   getProvidersDir() {
     return this.providersDir;
   }
 
   /**
    * Get backups directory path
+   */
+  /**
+   * Get backups directory path
+   * @returns {string} Backups directory path
    */
   getBackupsDir() {
     return this.backupsDir;
@@ -320,12 +437,20 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
   /**
    * Get aliases file path
    */
+  /**
+   * Get aliases file path
+   * @returns {string} Aliases file path
+   */
   getAliasesFile() {
     return this.aliasesFile;
   }
 
   /**
    * Get config file path
+   */
+  /**
+   * Get configuration file path
+   * @returns {string} Configuration file path
    */
   getConfigFile() {
     return this.configFile;
@@ -334,6 +459,10 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
 
   /**
    * Check if the configuration system is properly initialized
+   */
+  /**
+   * Check if the configuration system is properly initialized
+   * @returns {Promise<boolean>} True if initialized, false otherwise
    */
   async isInitialized() {
     const requiredPaths = [
@@ -350,6 +479,10 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
   /**
    * Get system information
    */
+  /**
+   * Get comprehensive system information
+   * @returns {Promise<SystemInfo>} System information object
+   */
   async getSystemInfo() {
     return {
       version: '1.0.0',
@@ -363,6 +496,10 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
 
   /**
    * Validate configuration integrity
+   */
+  /**
+   * Validate the entire configuration system
+   * @returns {Promise<ValidationResult>} Validation result with issues and details
    */
   async validateConfiguration() {
     const issues = [];
@@ -435,12 +572,21 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
   /**
    * Get current configuration
    */
+  /**
+   * Get current configuration
+   * @returns {Promise<Object>} Configuration object
+   */
   async getConfig() {
     return await FileUtils.readJsonSafe(this.configFile, this.defaultConfig);
   }
 
   /**
    * Reset configuration to defaults
+   */
+  /**
+   * Reset configuration to defaults
+   * @returns {Promise<void>}
+   * @throws {Error} When reset operation fails
    */
   async reset() {
     try {
@@ -467,6 +613,10 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
 
   /**
    * Export configuration for backup or migration
+   */
+  /**
+   * Export configuration for backup or migration
+   * @returns {Promise<Object>} Export data including config and system info
    */
   async exportConfig() {
     const config = await this.getConfig();

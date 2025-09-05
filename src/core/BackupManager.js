@@ -3,6 +3,20 @@
  * 
  * Manages configuration backups and restoration for Claude Code Kit.
  * Enhanced with compression, integrity checks, and security features.
+ * 
+ * @class
+ * @example
+ * const BackupManager = require('./BackupManager');
+ * const backupManager = new BackupManager('/path/to/config', '/path/to/claude');
+ * 
+ * // Create a backup
+ * const timestamp = await backupManager.createBackup('My backup');
+ * 
+ * // List all backups
+ * const backups = await backupManager.listBackups();
+ * 
+ * // Restore a backup
+ * await backupManager.restoreBackup(timestamp);
  */
 
 const fs = require('fs-extra');
@@ -11,7 +25,66 @@ const crypto = require('crypto');
 const Logger = require('../utils/Logger');
 const FileUtils = require('../utils/FileUtils');
 
+/**
+ * @typedef {Object} BackupMetadata
+ * @property {string} timestamp - Backup timestamp
+ * @property {string} description - Backup description
+ * @property {string} size - Human-readable backup size
+ * @property {number} sizeBytes - Backup size in bytes
+ * @property {number} files - Number of files in backup
+ * @property {string} checksum - Backup integrity checksum
+ * @property {string} created_by - Backup creator
+ * @property {string} version - Backup version
+ * @property {string} [claude_version] - Claude Code version
+ * @property {Object} system - System information
+ * @property {string} system.platform - Operating system platform
+ * @property {string} system.arch - System architecture
+ * @property {string} system.nodeVersion - Node.js version
+ * @property {Object} contents - Backup contents information
+ * @property {boolean} contents.claude - Whether Claude config is included
+ * @property {boolean} contents.providers - Whether providers are included
+ * @property {boolean} contents.config - Whether main config is included
+ * @property {boolean} compressed - Whether backup is compressed
+ * @property {Object} security - Security information
+ * @property {string} security.permissions - File permissions
+ * @property {string} security.integrity - Integrity status
+ */
+
+/**
+ * @typedef {Object} BackupStats
+ * @property {number} count - Number of backups
+ * @property {string} totalSize - Total size of all backups
+ * @property {BackupMetadata|null} oldestBackup - Oldest backup metadata
+ * @property {BackupMetadata|null} newestBackup - Newest backup metadata
+ */
+
+/**
+ * @typedef {Object} CleanupResult
+ * @property {number} deleted - Number of deleted backups
+ * @property {number} kept - Number of kept backups
+ */
+
+/**
+ * @typedef {Object} VerificationResult
+ * @property {boolean} valid - Whether backup is valid
+ * @property {string[]} issues - List of issues found
+ * @property {BackupMetadata|null} metadata - Backup metadata
+ */
+
 class BackupManager {
+  /**
+   * Create a new BackupManager instance
+   * 
+   * @param {string} configDir - Configuration directory path
+   * @param {string} claudeDir - Claude configuration directory path
+   * @throws {Error} If directories are not provided
+   * 
+   * @example
+   * const backupManager = new BackupManager(
+   *   '/home/user/.claude/ccvm',
+   *   '/home/user/.claude'
+   * );
+   */
   constructor(configDir, claudeDir) {
     this.configDir = configDir;
     this.claudeDir = claudeDir;
@@ -34,6 +107,14 @@ class BackupManager {
 
   /**
    * Create a backup of the current configuration with enhanced safety
+   * 
+   * @param {string} [description='Manual backup'] - Backup description
+   * @returns {Promise<string>} Backup timestamp
+   * @throws {Error} If backup creation fails
+   * 
+   * @example
+   * const timestamp = await backupManager.createBackup('Before major changes');
+   * console.log(`Backup created: ${timestamp}`);
    */
   async createBackup(description = 'Manual backup') {
     try {
@@ -133,6 +214,14 @@ class BackupManager {
 
   /**
    * Restore a backup
+   * 
+   * @param {string} timestamp - Backup timestamp to restore
+   * @returns {Promise<BackupMetadata>} Backup metadata
+   * @throws {Error} If backup not found or restoration fails
+   * 
+   * @example
+   * const metadata = await backupManager.restoreBackup('2025-01-15_10-30-45');
+   * console.log('Restored backup from:', metadata.timestamp);
    */
   async restoreBackup(timestamp) {
     const backupDir = path.join(this.backupsDir, timestamp);
@@ -181,6 +270,14 @@ class BackupManager {
 
   /**
    * List all available backups
+   * 
+   * @returns {Promise<BackupMetadata[]>} Array of backup metadata, sorted by timestamp (newest first)
+   * 
+   * @example
+   * const backups = await backupManager.listBackups();
+   * backups.forEach(backup => {
+   *   console.log(`${backup.timestamp}: ${backup.description} (${backup.size})`);
+   * });
    */
   async listBackups() {
     if (!await fs.pathExists(this.backupsDir)) {
@@ -229,6 +326,13 @@ class BackupManager {
 
   /**
    * Delete a backup
+   * 
+   * @param {string} timestamp - Backup timestamp to delete
+   * @returns {Promise<void>}
+   * @throws {Error} If backup not found or deletion fails
+   * 
+   * @example
+   * await backupManager.deleteBackup('2025-01-15_10-30-45');
    */
   async deleteBackup(timestamp) {
     const backupDir = path.join(this.backupsDir, timestamp);
@@ -242,6 +346,13 @@ class BackupManager {
 
   /**
    * Clean old backups (keep only specified number)
+   * 
+   * @param {number} [keepCount=10] - Number of backups to keep
+   * @returns {Promise<CleanupResult>} Cleanup result with deletion statistics
+   * 
+   * @example
+   * const result = await backupManager.cleanOldBackups(5);
+   * console.log(`Deleted ${result.deleted} backups, kept ${result.kept}`);
    */
   async cleanOldBackups(keepCount = 10) {
     const backups = await this.listBackups();
@@ -267,6 +378,13 @@ class BackupManager {
 
   /**
    * Get backup statistics
+   * 
+   * @returns {Promise<BackupStats>} Backup statistics
+   * 
+   * @example
+   * const stats = await backupManager.getBackupStats();
+   * console.log(`Total backups: ${stats.count}`);
+   * console.log(`Total size: ${stats.totalSize}`);
    */
   async getBackupStats() {
     const backups = await this.listBackups();
@@ -303,6 +421,12 @@ class BackupManager {
 
   /**
    * Generate timestamp for backup naming
+   * 
+   * @returns {string} Formatted timestamp string
+   * 
+   * @example
+   * const timestamp = backupManager.generateTimestamp();
+   * // returns: '2025-01-15_10-30-45'
    */
   generateTimestamp() {
     const now = new Date();
@@ -315,6 +439,13 @@ class BackupManager {
 
   /**
    * Calculate directory size
+   * 
+   * @param {string} dirPath - Directory path to calculate size for
+   * @returns {Promise<number>} Directory size in bytes
+   * 
+   * @example
+   * const size = await backupManager.calculateDirectorySize('/path/to/dir');
+   * console.log(`Directory size: ${backupManager.formatSize(size)}`);
    */
   async calculateDirectorySize(dirPath) {
     try {
@@ -327,6 +458,13 @@ class BackupManager {
 
   /**
    * Format file size in human readable format
+   * 
+   * @param {number} bytes - Size in bytes
+   * @returns {string} Human-readable size string
+   * 
+   * @example
+   * const formatted = backupManager.formatSize(1024 * 1024);
+   * // returns: '1.0 MB'
    */
   formatSize(bytes) {
     if (bytes === 0) {
@@ -342,6 +480,12 @@ class BackupManager {
 
   /**
    * Get Claude Code version if available
+   * 
+   * @returns {Promise<string>} Claude Code version or 'unknown'
+   * 
+   * @example
+   * const version = await backupManager.getClaudeVersion();
+   * console.log(`Claude version: ${version}`);
    */
   async getClaudeVersion() {
     try {
@@ -358,6 +502,17 @@ class BackupManager {
 
   /**
    * Verify backup integrity with comprehensive checks
+   * 
+   * @param {string} timestamp - Backup timestamp to verify
+   * @returns {Promise<VerificationResult>} Verification result
+   * 
+   * @example
+   * const result = await backupManager.verifyBackup('2025-01-15_10-30-45');
+   * if (result.valid) {
+   *   console.log('Backup is valid');
+   * } else {
+   *   console.log('Backup issues:', result.issues);
+   * }
    */
   async verifyBackup(timestamp) {
     const backupDir = path.join(this.backupsDir, timestamp);

@@ -1,6 +1,18 @@
 /**
  * MCP (Model Context Protocol) Manager for Claude Code
  * Manages MCP services specifically for Claude Code (not Claude Desktop)
+ * 
+ * @class
+ * @example
+ * const MCPManager = require('./MCPManager');
+ * const mcpManager = new MCPManager('/path/to/config');
+ * 
+ * // List available MCP services
+ * const services = await mcpManager.listServices();
+ * console.log('Available services:', services);
+ * 
+ * // Install a service
+ * await mcpManager.installService('filesystem');
  */
 
 const fs = require('fs-extra');
@@ -10,11 +22,55 @@ const chalk = require('chalk');
 const Table = require('cli-table3');
 const inquirer = require('inquirer');
 const ora = require('ora');
-const { execSync } = require('child_process');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 
-class MCPManagerV2 {
+const execAsync = promisify(exec);
+
+/**
+ * @typedef {Object} MCPServiceConfig
+ * @property {string} name - Service name
+ * @property {string} displayName - Display name for the service
+ * @property {string} description - Service description
+ * @property {string} package - NPM package name
+ * @property {string} transport - Transport type (stdio, sse)
+ * @property {boolean} recommended - Whether this service is recommended
+ * @property {string} installCommand - Installation command
+ * @property {string} addCommand - Command to add service to Claude
+ * @property {string} scope - Installation scope (user, global)
+ * @property {boolean} needsConfig - Whether service needs additional configuration
+ * @property {Object[]} [configFields] - Configuration fields if needed
+ */
+
+/**
+ * @typedef {Object} MCPServiceStatus
+ * @property {string} name - Service name
+ * @property {boolean} installed - Whether service is installed
+ * @property {boolean} configured - Whether service is configured
+ * @property {string} version - Installed version
+ * @property {string} location - Installation location
+ * @property {Object} [config] - Service configuration
+ */
+
+/**
+ * @typedef {Object} MCPRegistry
+ * @property {Object.<string, MCPServiceConfig>} services - Available services registry
+ */
+
+class MCPManager {
+  /**
+   * Create a new MCPManager instance
+   * 
+   * @param {string} configDir - Configuration directory path
+   * @throws {Error} If configDir is not provided
+   * 
+   * @example
+   * const mcpManager = new MCPManager('/home/user/.claude/ccvm');
+   */
   constructor(configDir) {
     this.configDir = configDir;
+    this.mcpDir = path.join(configDir, 'mcp');
+    this.configFile = path.join(this.mcpDir, 'config.json');
     
     // 预置的推荐 MCP 服务配置
     this.registry = {
@@ -84,11 +140,50 @@ class MCPManagerV2 {
   }
 
   /**
-   * 检查 Claude Code 是否可用
+   * 安全执行命令的辅助方法
+   * 避免阻塞事件循环，提供更好的错误处理
+   * 
+   * @param {string} command - 要执行的命令
+   * @param {Object} [options={}] - 执行选项
+   * @param {number} [options.timeout=10000] - 命令超时时间（毫秒）
+   * @param {string} [options.encoding='utf-8'] - 输出编码
+   * @returns {Promise<{stdout: string, stderr: string}>} 命令执行结果
+   * @throws {Error} 当命令执行失败时抛出错误
+   * @private
+   */
+  async #execCommand(command, options = {}) {
+    const { timeout = 10000, encoding = 'utf-8' } = options;
+    
+    try {
+      const result = await execAsync(command, { 
+        timeout,
+        encoding,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      return result;
+    } catch (error) {
+      // 对于某些命令，我们可能希望静默失败
+      if (options.silent) {
+        return { stdout: '', stderr: error.message };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if Claude Code CLI is available
+   * 
+   * @returns {Promise<boolean>} True if Claude Code CLI is available
+   * 
+   * @example
+   * const isAvailable = await mcpManager.checkClaudeCode();
+   * if (isAvailable) {
+   *   console.log('Claude Code CLI is available');
+   * }
    */
   async checkClaudeCode() {
     try {
-      execSync('claude --version', { stdio: 'ignore' });
+      await this.#execCommand('claude --version', { timeout: 5000, silent: true });
       return true;
     } catch (error) {
       return false;
@@ -97,22 +192,28 @@ class MCPManagerV2 {
 
   /**
    * 获取已安装的 MCP 服务（通过 claude mcp list）
+   * 
+   * @returns {Promise<Map<string, Object>>} 已安装服务的映射，key为服务名，value为服务信息
+   * 
+   * @example
+   * const installed = await mcpManager.getInstalledMCPs();
+   * console.log(`已安装 ${installed.size} 个服务`);
+   * for (const [name, info] of installed) {
+   *   console.log(`${name}:`, info);
+   * }
    */
   async getInstalledMCPs() {
     try {
-      const output = execSync('claude mcp list --json 2>/dev/null || claude mcp list', { 
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'ignore']
-      });
-      
-      // 尝试解析 JSON 输出
+      // 首先尝试 JSON 输出
       try {
-        const data = JSON.parse(output);
+        const result = await this.#execCommand('claude mcp list --json', { timeout: 10000, silent: true });
+        const data = JSON.parse(result.stdout);
         return new Map(Object.entries(data.servers || {}));
       } catch {
-        // 如果不是 JSON，尝试解析文本输出
+        // 如果 JSON 失败，尝试文本输出
+        const result = await this.#execCommand('claude mcp list', { timeout: 10000, silent: true });
         const installed = new Map();
-        const lines = output.split('\n');
+        const lines = result.stdout.split('\n');
         for (const line of lines) {
           // 尝试从文本输出中提取服务名称
           for (const [key, service] of Object.entries(this.registry)) {
@@ -131,6 +232,12 @@ class MCPManagerV2 {
 
   /**
    * 显示 MCP 服务列表
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.showList();
+   * // 输出格式化的服务列表表格
    */
   async showList() {
     const table = new Table({
@@ -167,6 +274,12 @@ class MCPManagerV2 {
 
   /**
    * 显示主菜单
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.showMainMenu();
+   * // 显示交互式主菜单，用户可以选择各种操作
    */
   async showMainMenu() {
     // 检查 Claude Code 是否安装
@@ -221,6 +334,12 @@ class MCPManagerV2 {
 
   /**
    * 显示已安装的服务
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.showInstalledServices();
+   * // 输出当前已安装的MCP服务列表
    */
   async showInstalledServices() {
     console.log(chalk.blue.bold('\n🔍 查询已安装的 MCP 服务...\n'));
@@ -234,7 +353,13 @@ class MCPManagerV2 {
   }
 
   /**
-   * 交互式安装
+   * 交互式安装MCP服务
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.interactiveInstall();
+   * // 通过交互式界面选择并安装MCP服务
    */
   async interactiveInstall() {
     const installed = await this.getInstalledMCPs();
@@ -288,7 +413,16 @@ class MCPManagerV2 {
   }
 
   /**
-   * 安装单个服务
+   * 安装单个MCP服务
+   * 
+   * @param {string} name - 服务名称
+   * @param {string} [scope='user'] - 安装作用域 ('user', 'project', 'local')
+   * @returns {Promise<void>}
+   * @throws {Error} 如果服务不存在或安装失败
+   * 
+   * @example
+   * await mcpManager.installService('filesystem', 'user');
+   * // 安装filesystem服务到用户作用域
    */
   async installService(name, scope = 'user') {
     const mcp = this.registry[name];
@@ -399,7 +533,13 @@ class MCPManagerV2 {
   }
 
   /**
-   * 交互式卸载
+   * 交互式卸载MCP服务
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.interactiveUninstall();
+   * // 通过交互式界面选择并卸载已安装的MCP服务
    */
   async interactiveUninstall() {
     console.log(chalk.blue.bold('\n🔍 获取已安装的服务...\n'));
@@ -470,7 +610,14 @@ class MCPManagerV2 {
   }
 
   /**
-   * 卸载单个服务
+   * 卸载单个MCP服务
+   * 
+   * @param {string} name - 服务名称
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.uninstallService('filesystem');
+   * // 从Claude Code中移除filesystem服务
    */
   async uninstallService(name) {
     const mcp = this.registry[name];
@@ -487,7 +634,13 @@ class MCPManagerV2 {
   }
 
   /**
-   * 检查环境配置
+   * 检查环境配置和系统状态
+   * 
+   * @returns {Promise<void>}
+   * 
+   * @example
+   * await mcpManager.doctor();
+   * // 输出系统环境检查结果和建议
    */
   async doctor() {
     console.log(chalk.blue.bold('\n🔍 检查环境配置...\n'));
@@ -604,4 +757,4 @@ class MCPManagerV2 {
   }
 }
 
-module.exports = MCPManagerV2;
+module.exports = MCPManager;
