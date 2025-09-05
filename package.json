@@ -1,6 +1,6 @@
 {
   "name": "@kedoupi/ccvm",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Claude Code Version Manager - manage Claude API providers like nvm",
   "main": "src/index.js",
   "bin": {
