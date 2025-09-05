@@ -102,26 +102,19 @@ class MCPManager {
       'memory': {
         name: 'memory',
         displayName: 'Memory Bank MCP',
-        description: '为 Claude 提供持久化记忆存储',
-        package: '@modelcontextprotocol/server-memory',
+        description: '为 Claude 提供多项目持久化记忆存储',
+        package: '@allpepper/memory-bank-mcp',
         transport: 'stdio',
         recommended: true,
-        installCommand: 'npm install -g @modelcontextprotocol/server-memory',
-        addCommand: 'claude mcp add memory npx -- -y @modelcontextprotocol/server-memory',
+        installCommand: 'npm install -g @allpepper/memory-bank-mcp',
+        addCommand: 'claude mcp add allpepper-memory-bank npx -- -y @allpepper/memory-bank-mcp',
+        removeServiceName: 'allpepper-memory-bank', // 实际在 Claude Code 中的服务名
         scope: 'user',
-        needsConfig: true,
-        configFields: [
-          {
-            name: 'MEMORY_STORE_PATH',
-            message: '记忆存储路径',
-            type: 'input',
-            default: path.join(os.homedir(), '.claude', 'memory'),
-            validate: (input) => {
-              if (!input) return '存储路径不能为空';
-              return true;
-            }
-          }
-        ]
+        needsConfig: false, // 改为 false，使用固定路径
+        // 预设的环境变量，不需要用户输入
+        envVars: {
+          'MEMORY_BANK_ROOT': path.join(os.homedir(), '.claude', 'memory-banks')
+        }
       },
       'docker': {
         name: 'docker',
@@ -141,7 +134,7 @@ class MCPManager {
         name: 'context7',
         displayName: 'Context7 MCP',
         description: 'Upstash Context7 MCP 服务，提供上下文管理功能',
-        package: '@upstash/context7-mcp@latest',
+        package: '@upstash/context7-mcp',
         transport: 'stdio',
         recommended: true,
         installCommand: 'npm install -g @upstash/context7-mcp@latest',
@@ -532,6 +525,31 @@ class MCPManager {
       }
     }
 
+    // 3.5. 处理预设的环境变量（如 memory-bank 的固定路径）
+    if (mcp.envVars) {
+      console.log(chalk.blue('配置预设环境变量...'));
+      const presetEnvVars = [];
+      
+      for (const [key, value] of Object.entries(mcp.envVars)) {
+        // 如果是路径类型的环境变量，确保目录存在
+        if (key.includes('ROOT') || key.includes('PATH') || key.includes('DIR')) {
+          try {
+            await fs.ensureDir(value);
+            console.log(chalk.green(`✅ 创建目录: ${value}`));
+          } catch (error) {
+            console.log(chalk.yellow(`⚠️  目录创建失败: ${value} - ${error.message}`));
+          }
+        }
+        
+        presetEnvVars.push(`-e ${key}="${value}"`);
+        console.log(chalk.gray(`  ${key}=${value}`));
+      }
+      
+      if (presetEnvVars.length > 0) {
+        addCommand += ' ' + presetEnvVars.join(' ');
+      }
+    }
+
     // 4. 执行添加命令
     console.log(chalk.gray(`执行: ${addCommand}`));
     try {
@@ -610,11 +628,21 @@ class MCPManager {
         return;
       }
 
+      let successCount = 0;
       for (const serviceName of selected) {
-        await this.uninstallService(serviceName);
+        const success = await this.uninstallService(serviceName);
+        if (success) {
+          successCount++;
+        }
       }
 
-      console.log(chalk.green.bold('\n✅ 移除完成！'));
+      if (successCount === selected.length) {
+        console.log(chalk.green.bold('\n✅ 移除完成！'));
+      } else if (successCount > 0) {
+        console.log(chalk.yellow.bold(`\n⚠️  部分完成：${successCount}/${selected.length} 个服务移除成功`));
+      } else {
+        console.log(chalk.red.bold('\n❌ 移除失败：没有服务被成功移除'));
+      }
       
     } catch (error) {
       console.log(chalk.red('❌ 无法获取服务列表'));
@@ -626,23 +654,35 @@ class MCPManager {
    * 卸载单个MCP服务
    * 
    * @param {string} name - 服务名称
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} 返回移除是否成功
    * 
    * @example
-   * await mcpManager.uninstallService('filesystem');
+   * const success = await mcpManager.uninstallService('filesystem');
    * // 从Claude Code中移除filesystem服务
    */
   async uninstallService(name) {
     const mcp = this.registry[name];
     const displayName = mcp ? mcp.displayName : name;
     
+    // 确定要移除的服务名称：优先使用 removeServiceName，否则使用 name
+    const removeServiceName = mcp?.removeServiceName || name;
+    
     console.log(chalk.blue(`\n🗑️  从 Claude Code 移除 ${displayName}...`));
 
     try {
-      execSync(`claude mcp remove ${name}`, { encoding: 'utf-8' });
+      const output = execSync(`claude mcp remove ${removeServiceName}`, { encoding: 'utf-8' });
       console.log(chalk.green(`✅ ${displayName} 已移除`));
+      if (output && output.trim()) {
+        console.log(chalk.gray(output));
+      }
+      return true;
     } catch (error) {
       console.log(chalk.red(`❌ 移除失败: ${error.message}`));
+      // 输出更详细的错误信息
+      if (error.stderr) {
+        console.log(chalk.gray(error.stderr));
+      }
+      return false;
     }
   }
 

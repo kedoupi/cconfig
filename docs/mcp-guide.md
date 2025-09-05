@@ -12,7 +12,7 @@ CCVM 默认提供以下精选的 MCP 服务：
 |---------|------|---------|
 | **Filesystem MCP** ⭐ | 让 Claude 读写本地文件和目录 | 否 |
 | **Sequential Thinking MCP** ⭐ | 帮助 Claude 进行结构化思考和推理 | 否 |
-| **Memory Bank MCP** ⭐ | 为 Claude 提供持久化记忆存储 | 是（存储路径） |
+| **Memory Bank MCP** ⭐ | 为 Claude 提供多项目持久化记忆存储 | 是（根目录路径） |
 | **Docker MCP** ⭐ | 管理 Docker 容器和镜像 | 否（需要 Python/UV） |
 
 ## 使用方法
@@ -74,7 +74,8 @@ Claude Code 支持三种 MCP 配置作用域：
 配置项说明：
 
 - **Memory Bank MCP**
-  - `MEMORY_STORE_PATH`: 记忆数据存储路径（默认：~/.claude/memory）
+  - `MEMORY_BANK_ROOT`: 记忆银行根目录路径（默认：.claude/memory-banks）
+  - 该目录基于项目级别，每个项目有独立的记忆存储空间
 
 - **Docker MCP**
   - 基于 Python 实现，需要先安装 UV 包管理器
