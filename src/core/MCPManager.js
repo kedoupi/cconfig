@@ -17,7 +17,6 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const os = require('os');
 const { execSync } = require('child_process');
 const chalk = require('chalk');
 const Table = require('cli-table3');
@@ -98,23 +97,6 @@ class MCPManager {
         addCommand: 'claude mcp add sequential-thinking npx -- -y @modelcontextprotocol/server-sequential-thinking',
         scope: 'user',
         needsConfig: false
-      },
-      'memory': {
-        name: 'memory',
-        displayName: 'Memory Bank MCP',
-        description: '为 Claude 提供多项目持久化记忆存储',
-        package: '@allpepper/memory-bank-mcp',
-        transport: 'stdio',
-        recommended: true,
-        installCommand: 'npm install -g @allpepper/memory-bank-mcp',
-        addCommand: 'claude mcp add allpepper-memory-bank npx -- -y @allpepper/memory-bank-mcp',
-        removeServiceName: 'allpepper-memory-bank', // 实际在 Claude Code 中的服务名
-        scope: 'user',
-        needsConfig: false, // 改为 false，使用固定路径
-        // 预设的环境变量，不需要用户输入
-        envVars: {
-          'MEMORY_BANK_ROOT': path.join(os.homedir(), '.claude', 'memory-banks')
-        }
       },
       'docker': {
         name: 'docker',
@@ -335,6 +317,9 @@ class MCPManager {
         break;
       case 'exit':
         process.exit(0);
+      default:
+        // 未知操作，忽略
+        break;
     }
   }
 
@@ -395,23 +380,10 @@ class MCPManager {
       return;
     }
 
-    // 询问安装作用域
-    const { scope } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'scope',
-        message: '选择安装作用域：',
-        choices: [
-          { name: '用户级别 (User) - 所有项目可用', value: 'user' },
-          { name: '项目级别 (Project) - 仅当前项目，可共享给团队', value: 'project' },
-          { name: '本地级别 (Local) - 仅当前项目，私有配置', value: 'local' }
-        ],
-        default: 'user'
-      }
-    ]);
+    // 使用用户级别作为默认作用域
 
     for (const serviceName of services) {
-      await this.installService(serviceName, scope);
+      await this.installService(serviceName);
     }
 
     console.log(chalk.green.bold('\n✅ 安装完成！'));
@@ -430,13 +402,13 @@ class MCPManager {
    * await mcpManager.installService('filesystem', 'user');
    * // 安装filesystem服务到用户作用域
    */
-  async installService(name, scope = 'user') {
+  async installService(name) {
     const mcp = this.registry[name];
     if (!mcp) {
       throw new Error(`未知的 MCP 服务: ${name}`);
     }
 
-    console.log(chalk.blue(`\n📦 安装 ${mcp.displayName} 到 ${scope} 作用域...`));
+    console.log(chalk.blue(`\n📦 安装 ${mcp.displayName} 到用户作用域...`));
 
     // 1. 先安装包（根据不同的包管理器）
     if (mcp.installCommand) {
@@ -483,18 +455,8 @@ class MCPManager {
       }
     }
 
-    // 2. 构建 claude mcp add 命令
-    let addCommand = mcp.addCommand;
-    
-    // 添加作用域参数 (使用 --scope 参数)
-    if (scope === 'project') {
-      addCommand = addCommand.replace('claude mcp add', 'claude mcp add --scope project');
-    } else if (scope === 'user') {
-      addCommand = addCommand.replace('claude mcp add', 'claude mcp add --scope user');
-    } else {
-      // local 是默认值，但为了明确，也可以指定
-      addCommand = addCommand.replace('claude mcp add', 'claude mcp add --scope local');
-    }
+    // 2. 构建 claude mcp add 命令（硬编码为用户级别）
+    let addCommand = mcp.addCommand.replace('claude mcp add', 'claude mcp add --scope user');
 
     // 3. 处理环境变量配置
     if (mcp.needsConfig && mcp.configFields) {

@@ -297,9 +297,6 @@ install_ccvm() {
     mkdir -p "$CCVM_DIR/backups"
     mkdir -p "$CCVM_DIR/mcp"
     
-    # 为 Claude Code MCP 服务创建必要目录
-    mkdir -p "$CLAUDE_DIR/memory-banks"
-    log INFO "已创建 Claude Code MCP 目录: ~/.claude/memory-banks"
     
     # 根据模式安装
     if [[ "$mode" == "dev" ]]; then
