@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const os = require('os');
 const testEnvManager = require('../helpers/TestEnvironmentManager');
+const ResourceManager = require('../../src/utils/ResourceManager');
 
 // Global test configuration
 global.TEST_TIMEOUT = 30000;
@@ -26,6 +27,9 @@ beforeAll(async () => {
 
 // Cleanup after all tests
 afterAll(async () => {
+  // 最终清理所有资源
+  await ResourceManager.cleanupAll();
+  
   // Clean up test directories
   try {
     await fs.remove(global.TEST_CONFIG_DIR);
@@ -46,9 +50,20 @@ beforeEach(async () => {
 });
 
 // Cleanup after each test
-afterEach(() => {
+afterEach(async () => {
   // 停用测试环境，恢复原始环境变量
   testEnvManager.deactivate();
+  
+  // 清理所有资源以避免测试间的资源泄漏
+  try {
+    await ResourceManager.cleanupAll();
+  } catch (error) {
+    // 静默处理清理错误，避免干扰测试结果
+    console.warn('ResourceManager cleanup warning:', error.message);
+  }
+  
+  // 给系统一些时间完成清理
+  await new Promise(resolve => setTimeout(resolve, 10));
 });
 
 // Suppress console.log during tests unless explicitly testing logging

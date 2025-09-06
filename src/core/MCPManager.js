@@ -17,7 +17,6 @@
 
 const fs = require('fs-extra');
 const path = require('path');
-const { execSync } = require('child_process');
 const chalk = require('chalk');
 const Table = require('cli-table3');
 const inquirer = require('inquirer');
@@ -335,8 +334,8 @@ class MCPManager {
   async showInstalledServices() {
     console.log(chalk.blue.bold('\n🔍 查询已安装的 MCP 服务...\n'));
     try {
-      const output = execSync('claude mcp list', { encoding: 'utf-8' });
-      console.log(output);
+      const result = await this.#execCommand('claude mcp list');
+      console.log(result.stdout);
     } catch (error) {
       console.log(chalk.red('❌ 无法获取已安装的服务列表'));
       console.log(chalk.gray(error.message));
@@ -421,7 +420,7 @@ class MCPManager {
         
         // 检查是否安装了 uvx
         try {
-          execSync('uvx --version', { stdio: 'ignore' });
+          await this.#execCommand('uvx --version', { silent: true });
           console.log(chalk.green('✅ 检测到 UV 包管理器'));
         } catch {
           console.log(chalk.yellow('⚠️  未检测到 UV 包管理器'));
@@ -445,7 +444,7 @@ class MCPManager {
         // Node.js 包的安装
         const spinner = ora(`安装 ${mcp.package}...`).start();
         try {
-          execSync(mcp.installCommand, { stdio: 'ignore' });
+          await this.#execCommand(mcp.installCommand, { silent: true });
           spinner.succeed(`${mcp.package} 安装成功`);
         } catch (error) {
           spinner.fail(`${mcp.package} 安装失败`);
@@ -515,10 +514,10 @@ class MCPManager {
     // 4. 执行添加命令
     console.log(chalk.gray(`执行: ${addCommand}`));
     try {
-      const output = execSync(addCommand, { encoding: 'utf-8' });
+      const result = await this.#execCommand(addCommand);
       console.log(chalk.green(`✅ ${mcp.displayName} 已添加到 Claude Code`));
-      if (output) {
-        console.log(chalk.gray(output));
+      if (result.stdout) {
+        console.log(chalk.gray(result.stdout));
       }
     } catch (error) {
       console.log(chalk.red(`❌ 添加失败: ${error.message}`));
@@ -539,11 +538,11 @@ class MCPManager {
     
     try {
       // 获取 Claude Code 中的服务列表
-      const output = execSync('claude mcp list', { encoding: 'utf-8' });
+      const result = await this.#execCommand('claude mcp list');
       
       // 从输出中提取服务名称
       const services = [];
-      const lines = output.split('\n');
+      const lines = result.stdout.split('\n');
       for (const line of lines) {
         // 匹配我们注册表中的服务
         for (const [key, service] of Object.entries(this.registry)) {
@@ -632,10 +631,10 @@ class MCPManager {
     console.log(chalk.blue(`\n🗑️  从 Claude Code 移除 ${displayName}...`));
 
     try {
-      const output = execSync(`claude mcp remove ${removeServiceName}`, { encoding: 'utf-8' });
+      const result = await this.#execCommand(`claude mcp remove ${removeServiceName}`);
       console.log(chalk.green(`✅ ${displayName} 已移除`));
-      if (output && output.trim()) {
-        console.log(chalk.gray(output));
+      if (result.stdout && result.stdout.trim()) {
+        console.log(chalk.gray(result.stdout));
       }
       return true;
     } catch (error) {
@@ -665,11 +664,11 @@ class MCPManager {
     // 检查 Claude Code
     const claudeInstalled = await this.checkClaudeCode();
     try {
-      const version = execSync('claude --version', { encoding: 'utf-8' }).trim();
+      const result = await this.#execCommand('claude --version');
       checks.push({
         name: 'Claude Code',
         status: true,
-        message: version
+        message: result.stdout.trim()
       });
     } catch {
       checks.push({
@@ -681,11 +680,11 @@ class MCPManager {
 
     // 检查 Node.js
     try {
-      const nodeVersion = execSync('node --version', { encoding: 'utf-8' }).trim();
+      const result = await this.#execCommand('node --version');
       checks.push({
         name: 'Node.js',
         status: true,
-        message: nodeVersion
+        message: result.stdout.trim()
       });
     } catch {
       checks.push({
@@ -697,11 +696,11 @@ class MCPManager {
 
     // 检查 npm
     try {
-      const npmVersion = execSync('npm --version', { encoding: 'utf-8' }).trim();
+      const result = await this.#execCommand('npm --version');
       checks.push({
         name: 'npm',
         status: true,
-        message: npmVersion
+        message: result.stdout.trim()
       });
     } catch {
       checks.push({
@@ -714,8 +713,8 @@ class MCPManager {
     // 检查已安装的 MCP 服务
     if (claudeInstalled) {
       try {
-        const output = execSync('claude mcp list', { encoding: 'utf-8' });
-        const serviceCount = (output.match(/\n/g) || []).length;
+        const result = await this.#execCommand('claude mcp list');
+        const serviceCount = (result.stdout.match(/\n/g) || []).length;
         checks.push({
           name: 'MCP 服务',
           status: serviceCount > 0,

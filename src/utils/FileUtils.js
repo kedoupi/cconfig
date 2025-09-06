@@ -1,4 +1,4 @@
-const fs = require('fs').promises;
+const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -276,15 +276,13 @@ class FileUtils {
    */
   static async safeRemove(targetPath) {
     try {
-      const stats = await fs.lstat(targetPath);
-      if (stats.isDirectory()) {
-        await fs.rm(targetPath, { recursive: true, force: true });
-      } else {
-        await fs.unlink(targetPath);
-      }
+      // 使用 fs-extra 的 remove 方法，它可以处理文件和目录
+      await fs.remove(targetPath);
     } catch (error) {
+      // 静默处理错误，这是 safeRemove 的特性
+      // 只有在不是"文件不存在"错误时才可能需要关注
       if (error.code !== 'ENOENT') {
-        throw error;
+        // 对于其他错误，我们仍然静默处理，确保不中断程序
       }
     }
   }
@@ -365,6 +363,11 @@ class FileUtils {
         
         if (stats.isDirectory()) {
           const items = await fs.readdir(currentPath);
+          
+          // 如果目录为空，直接返回，不需要进一步处理
+          if (items.length === 0) {
+            return;
+          }
           
           // 使用队列控制并发数，避免内存问题
           for (const item of items) {

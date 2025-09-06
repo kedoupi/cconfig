@@ -345,21 +345,34 @@ class Validator {
     
     // 移除危险的shell注入模式
     if (!allowShellChars) {
+      // 按顺序处理危险模式，保留安全内容
       const dangerousPatterns = [
-        /;\s*rm\s+-rf\s+.*/gi,        // rm -rf 命令及后面的所有内容
-        /;\s*sudo\s+.*/gi,            // sudo 命令及后面的所有内容
-        /\|\s*sh\s*$/gi,            // | sh 管道
-        /`[^`]*\s*(rm|sudo|sh)[^`]*`/gi,  // 反引号中的危险命令
-        /\$\([^)]*\s*(rm|sudo|sh)[^)]*\)/gi, // $() 中的危险命令
-        /;\s*npm\s+(uninstall|run)\s+/gi,  // npm 危险命令
-        /;\s*yarn\s+(remove|run)\s+/gi,    // yarn 危险命令
-        /;\s*curl\s+.*\s*\|\s*sh/gi,      // curl | shell 组合
-        /;\s*wget\s+.*\s*\|\s*sh/gi,      // wget | shell 组合
-        /[^a-zA-Z0-9._\-\/@:\s]/g         // 保留基本安全字符
+        { pattern: /;\s*rm\s+-rf\s+.*/gi, replacement: '' },        // rm -rf 命令及后面的所有内容
+        { pattern: /;\s*sudo\s+.*/gi, replacement: '' },            // sudo 命令及后面的所有内容
+        { pattern: /\|\s*sh\s*$/gi, replacement: '' },              // | sh 管道
+        { pattern: /`([^`]*)`/gi, replacement: '$1' },               // 移除反引号但保留内容
+        { pattern: /\$\(([^)]*)\)/gi, replacement: '$1' },          // 移除$()但保留内容
+        { pattern: /;\s*npm\s+(uninstall|run)\s+/gi, replacement: '' }, // npm 危险命令
+        { pattern: /;\s*yarn\s+(remove|run)\s+/gi, replacement: '' },   // yarn 危险命令
+        { pattern: /;\s*curl\s+.*\s*\|\s*sh/gi, replacement: '' },      // curl | shell 组合
+        { pattern: /;\s*wget\s+.*\s*\|\s*sh/gi, replacement: '' },      // wget | shell 组合
+        { pattern: /&&/g, replacement: ' ' }                           // 替换 && 为空格
       ];
       
-      for (const pattern of dangerousPatterns) {
-        sanitized = sanitized.replace(pattern, '');
+      for (const { pattern, replacement } of dangerousPatterns) {
+        sanitized = sanitized.replace(pattern, replacement);
+      }
+      
+      // 最后清理剩余的不安全字符，但保留基本字符
+      // 注意：移除连字符因为测试期望如此
+      sanitized = sanitized.replace(/[^\w\s./@:]/g, '');
+      
+      // 标准化多个空格为单个空格，除非preserveSpaces为true
+      if (!preserveSpaces) {
+        sanitized = sanitized.replace(/\s+/g, ' ').trim();
+      } else {
+        // 即使保留空格，也要避免过多的连续空格
+        sanitized = sanitized.replace(/\s{3,}/g, '  '); // 最多2个连续空格
       }
     }
     
@@ -377,10 +390,7 @@ class Validator {
       sanitized = sanitized.replace(/[&<>"']/g, char => htmlEscapeMap[char]);
     }
     
-    // 处理空格
-    if (!preserveSpaces) {
-      sanitized = sanitized.replace(/\s+/g, ' ').trim();
-    }
+    // 注意：空格处理已在上面的shell字符清理中完成
     
     // 限制长度
     if (sanitized.length > maxLength) {

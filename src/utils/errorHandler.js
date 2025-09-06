@@ -63,6 +63,9 @@ class ErrorHandler {
   constructor(config = {}) {
     this.config = { ...ErrorHandler.#defaultConfig, ...config };
     this.logFile = this.config.logFile;
+    this.maxLogSize = this.config.maxLogSize;
+    this.maxLogFiles = this.config.maxLogFiles;
+    this.autoRotate = this.config.autoRotate;
   }
 
   /**

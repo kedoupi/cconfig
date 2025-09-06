@@ -7,6 +7,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const ResourceManager = require('../../src/utils/ResourceManager');
 
 class TestUtils {
   constructor() {
@@ -26,13 +27,31 @@ class TestUtils {
    * Clean up all temporary directories
    */
   async cleanupTempDirs() {
-    for (const dir of this.tempDirs) {
+    // 先清理ResourceManager，避免冲突
+    await ResourceManager.cleanupAll();
+    
+    const cleanupPromises = Array.from(this.tempDirs).map(async (dir) => {
       try {
+        // 直接使用fs-extra的强力删除
         await fs.remove(dir);
       } catch (error) {
-        console.warn(`Failed to remove temp dir ${dir}:`, error.message);
+        // 如果普通删除失败，尝试强制删除
+        try {
+          if (process.platform === 'win32') {
+            // Windows 平台使用 rimraf 风格的删除
+            await fs.remove(dir);
+          } else {
+            // Unix 平台尝试更改权限后删除
+            await fs.chmod(dir, 0o755).catch(() => {}); // 忽略权限错误
+            await fs.remove(dir);
+          }
+        } catch (secondError) {
+          console.warn(`Failed to remove temp dir ${dir}:`, error.message);
+        }
       }
-    }
+    });
+    
+    await Promise.all(cleanupPromises);
     this.tempDirs.clear();
   }
 
