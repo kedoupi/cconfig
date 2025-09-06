@@ -94,7 +94,7 @@ class ConfigManager {
       : os.homedir();
     this.claudeDir = path.join(homeDir, '.claude');
     this.providersDir = path.join(this.configDir, 'providers');
-    this.backupsDir = path.join(this.configDir, 'backups');
+    // Backup directory removed as per user requirements
     this.aliasesFile = path.join(this.configDir, 'aliases.sh');
     this.lockFile = path.join(this.configDir, '.lock');
     this.configFile = path.join(this.configDir, 'config.json');
@@ -239,7 +239,6 @@ class ConfigManager {
     const directories = [
       { path: this.configDir, description: 'Main config directory' },
       { path: this.providersDir, description: 'Providers directory' },
-      { path: this.backupsDir, description: 'Backups directory' },
       { path: this.claudeDir, description: 'Claude config directory' },
       { path: path.join(this.claudeDir, 'commands'), description: 'Commands directory' },
       { path: path.join(this.claudeDir, 'agents'), description: 'Agents directory' },
@@ -275,11 +274,35 @@ class ConfigManager {
    * @throws {Error} When file creation or validation fails
    */
   async ensureFiles() {
+    // Create Claude settings first
+    const claudeSettingsFile = path.join(this.claudeDir, 'settings.json');
+    const claudeSettings = {
+      name: 'Claude Code Kit Configuration',
+      description: 'Enhanced configuration for Claude Code',
+      version: '2.0.0',
+      created: new Date().toISOString(),
+      apiSettings: {
+        timeout: 3000000,
+        retries: 3,
+        backoff: 'exponential'
+      },
+      features: {
+        autoSave: true,
+        syntaxHighlighting: true,
+        multiProvider: true
+      }
+    };
+
     const files = [
       {
         path: this.configFile,
         content: this.defaultConfig,
         description: 'Main configuration file'
+      },
+      {
+        path: claudeSettingsFile,
+        content: claudeSettings,
+        description: 'Claude settings file'
       }
     ];
 
@@ -287,6 +310,8 @@ class ConfigManager {
     for (const { path: filePath, content, description } of files) {
       try {
         if (!await fs.pathExists(filePath)) {
+          // Ensure parent directory exists
+          await FileUtils.ensureDir(path.dirname(filePath));
           await fs.writeJson(filePath, content, { spaces: 2 });
         } else {
           // Validate existing file
@@ -326,31 +351,11 @@ _cc_load_config() {
       await fs.writeFile(this.aliasesFile, aliasContent);
     }
 
-    // Create basic Claude settings if they don't exist
-    const claudeSettingsFile = path.join(this.claudeDir, 'settings.json');
-    if (!await fs.pathExists(claudeSettingsFile)) {
-      const claudeSettings = {
-        name: 'Claude Code Kit Configuration',
-        description: 'Enhanced configuration for Claude Code',
-        version: '2.0.0',
-        created: new Date().toISOString(),
-        apiSettings: {
-          timeout: 3000000,
-          retries: 3,
-          backoff: 'exponential'
-        },
-        features: {
-          autoSave: true,
-          syntaxHighlighting: true,
-          multiProvider: true
-        }
-      };
-      await fs.writeJson(claudeSettingsFile, claudeSettings, { spaces: 2 });
-    }
-
     // Create basic CLAUDE.md if it doesn't exist
     const claudeMdFile = path.join(this.claudeDir, 'CLAUDE.md');
     if (!await fs.pathExists(claudeMdFile)) {
+      // Ensure claude directory exists
+      await FileUtils.ensureDir(this.claudeDir);
       const claudeMdContent = `# Claude Code Configuration
 
 This configuration has been set up by Claude Code Kit v2.0.0.
@@ -427,12 +432,9 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
    * Get backups directory path
    */
   /**
-   * Get backups directory path
-   * @returns {string} Backups directory path
+   * Get backups directory path - REMOVED as per user requirements
+   * @deprecated Backup functionality removed
    */
-  getBackupsDir() {
-    return this.backupsDir;
-  }
 
   /**
    * Get aliases file path
@@ -468,7 +470,6 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
     const requiredPaths = [
       this.configDir,
       this.providersDir,
-      this.backupsDir,
       this.claudeDir
     ];
 
@@ -508,7 +509,6 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
     const requiredDirs = [
       { path: this.configDir, name: 'Config directory' },
       { path: this.providersDir, name: 'Providers directory' },
-      { path: this.backupsDir, name: 'Backups directory' },
       { path: this.claudeDir, name: 'Claude directory' }
     ];
 
@@ -593,10 +593,7 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
       await this._checkLock();
       await this._createLock();
 
-      // Create backup before reset
-      const BackupManager = require('./BackupManager');
-      const backupManager = new BackupManager(this.configDir, this.claudeDir);
-      await backupManager.createBackup('Pre-reset backup');
+      // Note: Backup functionality removed as per user requirements
 
       // Remove and recreate directories
       await FileUtils.safeRemove(this.configDir);
@@ -634,7 +631,6 @@ For more information, visit: https://github.com/kedoupi/claude-code-kit
         configDir: this.configDir,
         claudeDir: this.claudeDir,
         providersDir: this.providersDir,
-        backupsDir: this.backupsDir
       }
     };
   }

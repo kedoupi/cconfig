@@ -3,7 +3,7 @@
 /**
  * Claude Code Kit Configuration CLI
  * 
- * This tool manages Claude Code Kit configurations, providers, and backups.
+ * This tool manages Claude Code Kit configurations and providers.
  */
 
 const { Command } = require('commander');
@@ -21,8 +21,6 @@ const packageJson = require('../package.json');
 // Import core modules
 const ConfigManager = require('../src/core/ConfigManager');
 const ProviderManager = require('../src/core/ProviderManager');
-const BackupManager = require('../src/core/BackupManager');
-const AliasGenerator = require('../src/core/AliasGenerator');
 const MCPManager = require('../src/core/MCPManager');
 
 // Import utilities
@@ -35,9 +33,7 @@ const CONFIG_DIR = path.join(CLAUDE_DIR, 'ccvm');
 // Initialize managers
 const configManager = new ConfigManager(CONFIG_DIR);
 const providerManager = new ProviderManager(CONFIG_DIR);
-const backupManager = new BackupManager(CONFIG_DIR, CLAUDE_DIR);
 const mcpManager = new MCPManager(CONFIG_DIR);
-// Note: AliasGenerator removed - using direct claude command integration
 
 // Main CLI program
 const program = new Command();
@@ -479,9 +475,8 @@ program
       
       await configManager.init();
       
-      const [providers, backups, systemInfo, config] = await Promise.all([
+      const [providers, systemInfo, config] = await Promise.all([
         providerManager.listProviders(),
-        backupManager.listBackups(), 
         configManager.getSystemInfo(),
         configManager.getConfig()
       ]);
@@ -522,9 +517,7 @@ program
       // Configuration info
       console.log(chalk.cyan('\n配置信息:'));
       console.log(`  Provider 数量: ${providers.length} 个`);
-      console.log(`  备份数量: ${backups.length} 个`);
       console.log(`  默认 Provider: ${config.defaultProvider || '未设置'}`);
-      console.log(`  最后更新: ${backups.length > 0 ? backups[0].timestamp : '从未'}`);
 
       // Directory status
       console.log(chalk.cyan('\n目录状态:'));
@@ -544,14 +537,7 @@ program
           }
         }
 
-        // Backup statistics
-        if (backups.length > 0) {
-          const backupStats = await backupManager.getBackupStats();
-          console.log(chalk.cyan('\nBackup Statistics:'));
-          console.log(`  Total Size: ${backupStats.totalSize}`);
-          console.log(`  Oldest: ${backupStats.oldestBackup?.timestamp || 'None'}`);
-          console.log(`  Newest: ${backupStats.newestBackup?.timestamp || 'None'}`);
-        }
+        // Backup functionality removed as per user requirements
       }
 
     } catch (error) {
@@ -639,8 +625,7 @@ program
         const providers = await providerManager.listProviders();
         console.log(`  Providers: ${providers.length} configured`);
         
-        const backups = await backupManager.listBackups();
-        console.log(`  Backups: ${backups.length} available`);
+        // Backup functionality removed as per user requirements
         
       } catch (error) {
         console.log(`  Configuration: ❌ ${error.message}`);
@@ -670,23 +655,7 @@ program
         // Note: Aliases validation removed - using direct claude command integration
         console.log('  Integration: ✅ Direct claude command (no aliases needed)');
 
-        // Validate backups
-        const backups = await backupManager.listBackups();
-        const recentBackups = backups.slice(0, 3);
-        let validBackups = 0;
-        for (const backup of recentBackups) {
-          try {
-            const verification = await backupManager.verifyBackup(backup.timestamp);
-            if (verification.valid) {
-              validBackups++;
-            } else {
-              issues.push(`Backup '${backup.timestamp}': ${verification.issues.join(', ')}`);
-            }
-          } catch (error) {
-            issues.push(`Backup '${backup.timestamp}': ${error.message}`);
-          }
-        }
-        console.log(`  Backups: ${validBackups}/${recentBackups.length} recent backups valid`);
+        // Backup validation removed as per user requirements
 
       } catch (error) {
         issues.push(`Validation failed: ${error.message}`);

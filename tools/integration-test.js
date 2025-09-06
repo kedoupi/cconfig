@@ -16,8 +16,7 @@ const { promisify } = require('util');
 // Import core modules
 const ConfigManager = require('../src/core/ConfigManager');
 const ProviderManager = require('../src/core/ProviderManager');
-const BackupManager = require('../src/core/BackupManager');
-const AliasGenerator = require('../src/core/AliasGenerator');
+// BackupManager removed as per user requirements
 const ErrorHandler = require('../src/utils/errorHandler');
 
 const execAsync = promisify(exec);
@@ -30,8 +29,8 @@ class IntegrationTest {
   constructor() {
     this.configManager = new ConfigManager(TEST_CONFIG_DIR);
     this.providerManager = new ProviderManager(TEST_CONFIG_DIR);
-    this.backupManager = new BackupManager(TEST_CONFIG_DIR, TEST_CLAUDE_DIR);
-    this.aliasGenerator = new AliasGenerator(TEST_CONFIG_DIR);
+    // BackupManager removed as per user requirements
+    // AliasGenerator removed as per user requirements
     this.errorHandler = new ErrorHandler();
     
     this.results = {
@@ -53,8 +52,8 @@ class IntegrationTest {
       // Test each component individually
       await this.testConfigManager();
       await this.testProviderManager();
-      await this.testBackupManager();
-      await this.testAliasGenerator();
+      // Backup manager test removed as per user requirements
+      // AliasGenerator test removed as per user requirements
       await this.testErrorHandler();
       
       // Test full workflow
@@ -171,101 +170,10 @@ class IntegrationTest {
   }
 
   /**
-   * Test BackupManager functionality
+   * BackupManager test removed as per user requirements
    */
-  async testBackupManager() {
-    console.log('💾 Testing BackupManager...');
-    
-    try {
-      // Create some test files in Claude directory
-      await fs.ensureDir(TEST_CLAUDE_DIR);
-      await fs.writeFile(path.join(TEST_CLAUDE_DIR, 'test-file.txt'), 'test content');
-      
-      // Test backup creation
-      const timestamp = await this.backupManager.createBackup('Integration test backup');
-      if (timestamp) {
-        this.pass('Backup creation');
-      } else {
-        this.fail('Backup creation failed');
-      }
-      
-      // Test backup listing
-      const backups = await this.backupManager.listBackups();
-      if (backups.length > 0 && backups[0].timestamp === timestamp) {
-        this.pass('Backup listing');
-      } else {
-        this.fail('Backup listing failed');
-      }
-      
-      // Test backup verification
-      const verification = await this.backupManager.verifyBackup(timestamp);
-      if (verification.valid) {
-        this.pass('Backup verification');
-      } else {
-        this.fail(`Backup verification failed: ${verification.issues.join(', ')}`);
-      }
-      
-      // Test backup statistics
-      const stats = await this.backupManager.getBackupStats();
-      if (stats && stats.count === backups.length) {
-        this.pass('Backup statistics');
-      } else {
-        this.fail('Backup statistics failed');
-      }
-      
-    } catch (error) {
-      this.fail(`BackupManager test failed: ${error.message}`);
-    }
-  }
 
-  /**
-   * Test AliasGenerator functionality
-   */
-  async testAliasGenerator() {
-    console.log('🔗 Testing AliasGenerator...');
-    
-    try {
-      // Test alias generation
-      await this.aliasGenerator.generateAliases();
-      this.pass('Alias generation');
-      
-      // Test aliases file creation
-      const aliasesFile = path.join(TEST_CONFIG_DIR, 'aliases.sh');
-      const aliasesExist = await fs.pathExists(aliasesFile);
-      if (aliasesExist) {
-        this.pass('Aliases file creation');
-      } else {
-        this.fail('Aliases file not created');
-      }
-      
-      // Test aliases content
-      const aliasContent = await fs.readFile(aliasesFile, 'utf8');
-      if (aliasContent.includes('Claude Code Kit') && aliasContent.includes('test-provider')) {
-        this.pass('Aliases content validation');
-      } else {
-        this.fail('Aliases content validation failed');
-      }
-      
-      // Test alias statistics
-      const stats = await this.aliasGenerator.getEnhancedStats();
-      if (stats && stats.totalProviders > 0) {
-        this.pass('Alias statistics');
-      } else {
-        this.fail('Alias statistics failed');
-      }
-      
-      // Test preview generation
-      const preview = await this.aliasGenerator.previewAliases();
-      if (preview && preview.includes('test-provider')) {
-        this.pass('Alias preview generation');
-      } else {
-        this.fail('Alias preview generation failed');
-      }
-      
-    } catch (error) {
-      this.fail(`AliasGenerator test failed: ${error.message}`);
-    }
-  }
+  // AliasGenerator test removed as per user requirements
 
   /**
    * Test ErrorHandler functionality
@@ -338,16 +246,7 @@ class IntegrationTest {
         this.fail('Multi-provider alias generation failed');
       }
       
-      // Create another backup
-      await this.backupManager.createBackup('Workflow test backup');
-      
-      // List all backups
-      const allBackups = await this.backupManager.listBackups();
-      if (allBackups.length >= 2) {
-        this.pass('Multiple backup management');
-      } else {
-        this.fail('Multiple backup management failed');
-      }
+      // Backup workflow test removed as per user requirements
       
       // Test configuration validation with multiple components
       const validation = await this.configManager.validateConfiguration();

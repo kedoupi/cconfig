@@ -30,7 +30,7 @@ describe('ConfigManager', () => {
         : path.join(os.homedir(), '.claude');
       expect(configManager.getClaudeDir()).toBe(expectedClaudeDir);
       expect(configManager.getProvidersDir()).toBe(path.join(testConfigDir, 'providers'));
-      expect(configManager.getBackupsDir()).toBe(path.join(testConfigDir, 'backups'));
+      // Backup directory test removed as per user requirements
     });
 
     it('should use default paths when no configDir provided', () => {
@@ -46,7 +46,7 @@ describe('ConfigManager', () => {
       const expectedDirs = [
         configManager.getConfigDir(),
         configManager.getProvidersDir(),
-        configManager.getBackupsDir(),
+        // Backup directory removed as per user requirements
         configManager.getClaudeDir(),
         path.join(configManager.getClaudeDir(), 'commands'),
         path.join(configManager.getClaudeDir(), 'agents'),
@@ -159,7 +159,7 @@ describe('ConfigManager', () => {
       // Create directories but not files
       await fs.ensureDir(configManager.getConfigDir());
       await fs.ensureDir(configManager.getProvidersDir());
-      await fs.ensureDir(configManager.getBackupsDir());
+      // Backup directory creation removed as per user requirements
       await fs.ensureDir(configManager.getClaudeDir());
 
       const validation = await configManager.validateConfiguration();
@@ -198,27 +198,14 @@ describe('ConfigManager', () => {
       expect(await fs.pathExists(testFile)).toBe(false);
     });
 
-    it('should create backup before reset', async () => {
-      await configManager.init();
-      
-      // Mock BackupManager to verify backup creation
-      const BackupManager = require('../../../src/core/BackupManager');
-      const createBackupSpy = jest.spyOn(BackupManager.prototype, 'createBackup')
-        .mockResolvedValue('test-backup-timestamp');
-
-      await configManager.reset();
-
-      expect(createBackupSpy).toHaveBeenCalledWith('Pre-reset backup');
-      
-      createBackupSpy.mockRestore();
-    });
+    // Backup creation test removed as per user requirements
   });
 
   describe('path getters', () => {
     it('should return correct paths', () => {
       expect(configManager.getConfigDir()).toBe(testConfigDir);
       expect(configManager.getProvidersDir()).toBe(path.join(testConfigDir, 'providers'));
-      expect(configManager.getBackupsDir()).toBe(path.join(testConfigDir, 'backups'));
+      // Backup directory test removed as per user requirements
       expect(configManager.getAliasesFile()).toBe(path.join(testConfigDir, 'aliases.sh'));
     });
   });
@@ -246,15 +233,5 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('integration with other managers', () => {
-    it('should work with BackupManager during reset', async () => {
-      await configManager.init();
-      
-      // This tests the integration without mocking
-      await expect(configManager.reset()).resolves.not.toThrow();
-      
-      // Verify reinitialization
-      expect(await configManager.isInitialized()).toBe(true);
-    });
-  });
+  // Integration with other managers test removed as per user requirements
 });
