@@ -186,11 +186,11 @@ install_claude_config() {
     local source_claude_dir=$1
     
     if [[ ! -d "$source_claude_dir" ]]; then
-        log INFO "未找到 .claude 配置目录，跳过配置安装"
+        log INFO "未找到 Claude 配置模板目录，跳过配置安装"
         return 0
     fi
     
-    log INFO "安装 Claude Code 增强配置..."
+    log INFO "安装 Claude Code 增强配置 (agents, commands, settings)..."
     
     # 确保 ~/.claude 目录存在
     mkdir -p "$CLAUDE_DIR"
@@ -222,7 +222,7 @@ install_claude_config() {
         fi
     done
     
-    log SUCCESS "Claude Code 增强配置已安装到 ~/.claude/"
+    log SUCCESS "Claude Code 增强配置已安装到 ~/.claude/ (包含 agents, commands, context 等)"
 }
 
 # ============================================================================
@@ -238,7 +238,7 @@ install_dev_mode() {
     echo "$SCRIPT_DIR" > "$CCVM_DIR/dev_path"
     
     # 安装 Claude Code 增强配置
-    install_claude_config "$SCRIPT_DIR/.claude"
+    install_claude_config "$SCRIPT_DIR/claude-templates"
     
     log INFO "安装开发依赖..."
     (cd "$SCRIPT_DIR" && npm install --loglevel=error >/dev/null 2>&1) && log SUCCESS "依赖已安装" || log WARN "依赖安装失败"
@@ -273,7 +273,7 @@ install_prod_mode() {
         done
         
         # 安装 Claude Code 增强配置
-        install_claude_config "$temp_dir/.claude"
+        install_claude_config "$temp_dir/claude-templates"
         
         # 清理临时目录
         rm -rf "$temp_dir"
