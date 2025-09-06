@@ -44,9 +44,8 @@ CCVM（Claude Code Version Manager）是一个综合性的 Claude Code 配置管
 - 🛡️ **安全凭据管理** - 安全存储和管理 API 密钥，支持权限控制
 - 🚀 **一键安装配置** - 自动环境检测，智能安装和配置
 - ⚡ **智能Claude集成** - 无缝集成原生Claude命令，自动环境变量配置
-- 📦 **MCP服务管理** - 为 Claude Desktop 安装和管理模型上下文协议服务
-- 📊 **使用统计分析** - 集成 ccusage 工具，全面分析 Claude Code 使用情况和成本估算
-- 🔄 **自动备份恢复** - 配置变更自动备份，支持一键恢复
+- 📦 **MCP服务管理** - 为 Claude Code 安装和管理模型上下文协议服务
+- 📊 **环境变量管理** - 通过 `ccvm env` 命令进行动态环境加载
 - 🩺 **系统诊断工具** - 全面的系统检查和问题诊断
 - 🎯 **简洁设计理念** - 减少命令冗余，统一管理界面
 
@@ -110,17 +109,18 @@ ccvm show <别名>
 # 设置默认提供商
 ccvm use <别名>
 
-# 使用claude命令（自动加载CCVM配置）
+# 使用claude命令与CCVM环境
+eval "$(ccvm env)"
 claude "你的问题"
 
 # 临时切换到特定提供商（不修改默认配置）
-claude -P <提供商别名> "你的问题"
-claude --provider <提供商别名> "你的问题"
+eval "$(ccvm env --provider <提供商别名>)"
+claude "你的问题"
 
 # 例如：
-claude "解释 React hooks"                    # 使用默认提供商
-claude -P anthropic "设计一个 REST API"      # 临时使用anthropic
-claude --provider custom-api "翻译文档"     # 临时使用custom-api
+eval "$(ccvm env)"; claude "解释 React hooks"                    # 使用默认提供商
+eval "$(ccvm env --provider anthropic)"; claude "设计一个 REST API"      # 临时使用anthropic
+eval "$(ccvm env --provider custom-api)"; claude "翻译文档"     # 临时使用custom-api
 ```
 
 5. **系统状态检查**
@@ -129,19 +129,16 @@ ccvm status
 ccvm doctor
 ```
 
-6. **使用统计分析**
+6. **环境管理**
 ```bash
-# 查看全面的使用统计信息
-ccusage
+# 输出用于shell求值的环境变量
+ccvm env
 
-# 每日使用报告
-ccusage --daily
+# 临时使用特定提供商
+ccvm env --provider <别名>
 
-# 月度使用汇总  
-ccusage --monthly
-
-# 实时会话监控
-ccusage --live
+# 检查当前配置
+ccvm status --detailed
 ```
 
 ### 💡 使用示例
@@ -162,35 +159,42 @@ ccvm add
 
 # 设置默认提供商并使用
 ccvm use anthropic
+eval "$(ccvm env)"
 claude "技术问题咨询"
 
 # 临时切换到其他提供商（推荐方式）
-claude -P custom "使用自定义API的问题"
-claude --provider backup-api "紧急情况使用备用API"
+eval "$(ccvm env --provider custom)"
+claude "使用自定义API的问题"
 
-# 组合使用其他参数
-claude -P anthropic --debug "调试模式下的技术问题"
-claude --provider custom --pp "跳过权限检查的操作"
+eval "$(ccvm env --provider backup-api)"
+claude "紧急情况使用备用API"
 ```
 
 #### 临时 Provider 切换（高级用法）
 ```bash
 # 无需修改默认配置的临时切换（推荐）
-claude -P backup-api "使用备用API处理紧急情况"
-claude --provider test-env "在测试环境中验证功能"
+eval "$(ccvm env --provider backup-api)"
+claude "使用备用API处理紧急情况"
 
-# 参数组合使用
-claude -P anthropic-cn --debug "中文API调试模式"
-claude --provider custom-api --pp "绕过权限检查的特殊操作"
+eval "$(ccvm env --provider test-env)"
+claude "在测试环境中验证功能"
 
 # 快速多Provider工作流
-claude -P fast-api "快速原型开发问题"        # 使用快速API
-claude -P quality-api "生产级代码review"    # 切换到高质量API
-claude -P cost-api "大量数据处理任务"        # 切换到经济型API
+eval "$(ccvm env --provider fast-api)"
+claude "快速原型开发问题"        # 使用快速API
+
+eval "$(ccvm env --provider quality-api)"
+claude "生产级代码review"        # 切换到高质量API
+
+eval "$(ccvm env --provider cost-api)"
+claude "大量数据处理任务"        # 切换到经济型API
 
 # 错误恢复场景
-claude "主要任务"                          # 默认API失败
-claude -P backup-api "主要任务"           # 快速切换到备用API
+eval "$(ccvm env)"
+claude "主要任务"               # 默认API
+
+eval "$(ccvm env --provider backup-api)"
+claude "主要任务"               # 快速切换到备用API
 ```
 
 #### 团队协作配置
@@ -201,8 +205,8 @@ ccvm status --detailed
 # 切换默认提供商
 ccvm use anthropic
 
-# 查看和管理备份
-ccvm history
+# 检查系统健康状态
+ccvm doctor --fix
 ```
 
 #### MCP 服务管理
@@ -229,47 +233,41 @@ claude mcp list
 CCVM (Claude Code Version Manager)
 ├── ConfigManager      # 系统配置管理
 ├── ProviderManager    # API提供商管理  
-├── BackupManager      # 备份和恢复
-├── AliasGenerator     # Shell别名生成
-└── UpdateManager      # 配置模板更新
+├── MCPManager         # MCP服务管理
+└── Utils/             # 工具模块（banner、logger、验证等）
 ```
 
 ### ⚡ 技术实现
 
-**智能Claude函数集成**
+**动态环境加载**
 ```bash
-# CCVM重新定义了claude函数，实现无缝集成：
-claude() {
-    # 1. 动态加载CCVM环境变量
-    eval "$(ccvm env 2>/dev/null)"
-    
-    # 2. 检查配置有效性
-    if [ $? -ne 0 ]; then
-        echo "❌ Failed to load CCVM configuration"
-        return 1
-    fi
-    
-    # 3. 调用原生Claude命令
-    command claude "$@"
-}
+# CCVM 提供动态环境变量加载：
+
+# 方法1：直接求值（推荐）
+eval "$(ccvm env)"
+claude "你的问题"
+
+# 方法2：特定提供商的临时使用
+eval "$(ccvm env --provider custom-api)"
+claude "向自定义API提问"
+
+# 方法3：shell特定格式
+eval "$(ccvm env --shell fish)"  # 适用于fish shell用户
 ```
 
 **工作流程**
-1. 📡 `ccvm env` 输出当前provider的环境变量设置
-2. 🔧 claude函数自动加载这些环境变量
-3. 🚀 直接调用原生Claude CLI，传递所有参数
-4. ✅ 完全透明的体验，无需额外配置
+1. 📡 `ccvm env` 输出shell兼容的环境变量导出语句
+2. 🔧 `eval` 命令将这些变量加载到当前shell会话中
+3. 🚀 原生 `claude` 命令自动使用已加载的环境变量
+4. ✅ 完全透明的体验，无需配置文件
 
 **配置文件结构**
 ```
 ~/.claude/ccvm/
 ├── config.json        # 系统配置
-├── history.json       # 操作历史
 ├── providers/         # 提供商配置
-│   ├── anthropic.json
-│   └── custom.json
-└── backups/           # 自动备份
-    └── 2025-08-26_10-30-45/
+│   ├── anthropic.json # 独立提供商配置
+│   └── custom.json    # （使用600权限）
 ```
 
 ### 📚 CLI 命令参考
@@ -283,9 +281,7 @@ claude() {
 | `ccvm remove <别名>` | 移除提供商 | `ccvm remove old-provider` |
 | `ccvm use [别名]` | 设置/选择默认提供商 | `ccvm use anthropic` |
 | `ccvm env [--shell <shell>]` | 输出环境变量 | `ccvm env --shell bash` |
-| `ccvm exec` | 使用当前配置执行claude | `ccvm exec "hello world"` |
-| `ccvm update [--force]` | 更新配置模板 | `ccvm update --force` |
-| `ccvm history` | 查看/恢复配置备份 | `ccvm history` |
+| `ccvm env [--provider <别名>]` | 输出特定提供商的变量 | `ccvm env --provider custom` |
 | `ccvm status [--detailed]` | 显示系统状态 | `ccvm status --detailed` |
 | `ccvm doctor [--fix]` | 运行系统诊断 | `ccvm doctor --fix` |
 | `ccvm mcp` | 管理 Claude Code 的 MCP 服务 | `ccvm mcp` |
@@ -323,13 +319,13 @@ ccvm/
 │   ├── core/          # 核心管理器
 │   │   ├── ConfigManager.js
 │   │   ├── ProviderManager.js
-│   │   ├── BackupManager.js
-│   │   ├── AliasGenerator.js
-│   │   └── UpdateManager.js
+│   │   └── MCPManager.js
 │   └── utils/         # 工具函数
 │       ├── banner.js  # ASCII艺术和横幅
 │       ├── errorHandler.js
-│       └── logger.js
+│       ├── logger.js
+│       ├── Validator.js
+│       └── FileUtils.js
 ├── bin/               # CLI入口点
 ├── tests/             # 测试文件
 │   ├── unit/          # 单元测试

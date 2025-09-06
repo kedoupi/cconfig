@@ -44,10 +44,9 @@ CCVM (Claude Code Version Manager) is a comprehensive configuration management t
 - 🛡️ **Secure Credential Management** - Safe storage and management of API keys with permission control
 - 🚀 **One-Click Installation** - Automatic environment detection with intelligent setup
 - ⚡ **Smart Claude Integration** - Seamless integration with native Claude command, automatic environment setup
-- 📦 **MCP Service Management** - Install and manage Model Context Protocol services for Claude Desktop
-- 📊 **Usage Analytics** - Includes ccusage tool for comprehensive Claude Code usage analysis and cost estimation
-- 🔄 **Automatic Backup & Restore** - Auto-backup on configuration changes with one-click restore
-- 🩺 **System Diagnostics** - Comprehensive system checks and issue diagnosis
+- 📦 **MCP Service Management** - Install and manage Model Context Protocol services for Claude Code
+- 📊 **Environment Variable Management** - Dynamic environment loading via `ccvm env` command
+- 🩺 **System Diagnostics** - Comprehensive health checks, validation, and issue diagnosis
 - 🎯 **Clean Design** - Reduced command redundancy with unified management interface
 
 ### 🚀 Quick Start
@@ -110,17 +109,18 @@ ccvm show <alias>
 # Set default provider
 ccvm use <alias>
 
-# Use claude command (automatically loads CCVM config)
+# Use claude command with CCVM environment
+eval "$(ccvm env)"
 claude "your question"
 
 # Temporary switch to specific provider (without changing default)
-claude -P <provider-alias> "your question"
-claude --provider <provider-alias> "your question"
+eval "$(ccvm env --provider <provider-alias>)"
+claude "your question"
 
 # Examples:
-claude "Explain React hooks"                    # Use default provider
-claude -P anthropic "Design a REST API"        # Temporarily use anthropic
-claude --provider custom-api "Translate docs"  # Temporarily use custom-api
+eval "$(ccvm env)"; claude "Explain React hooks"                    # Use default provider
+eval "$(ccvm env --provider anthropic)"; claude "Design a REST API"        # Temporarily use anthropic
+eval "$(ccvm env --provider custom-api)"; claude "Translate docs"  # Temporarily use custom-api
 ```
 
 5. **System Status Check**
@@ -129,19 +129,16 @@ ccvm status
 ccvm doctor
 ```
 
-6. **Usage Analytics**
+6. **Environment Management**
 ```bash
-# View comprehensive usage statistics
-ccusage
+# Output environment variables for shell evaluation
+ccvm env
 
-# Daily usage report  
-ccusage --daily
+# Use specific provider temporarily
+ccvm env --provider <alias>
 
-# Monthly usage summary
-ccusage --monthly
-
-# Live session monitoring
-ccusage --live
+# Check current configuration
+ccvm status --detailed
 ```
 
 ### 💡 Usage Examples
@@ -162,35 +159,42 @@ ccvm add
 
 # Set default provider and use
 ccvm use anthropic
+eval "$(ccvm env)"
 claude "Technical consultation"
 
 # Temporary switch to other providers (recommended approach)
-claude -P custom "Question using custom API"
-claude --provider backup-api "Emergency backup API usage"
+eval "$(ccvm env --provider custom)"
+claude "Question using custom API"
 
-# Combine with other parameters
-claude -P anthropic --debug "Technical question in debug mode"
-claude --provider custom --pp "Skip permission check operation"
+eval "$(ccvm env --provider backup-api)"
+claude "Emergency backup API usage"
 ```
 
 #### Temporary Provider Switching (Advanced Usage)
 ```bash
 # Temporary switching without modifying default config (recommended)
-claude -P backup-api "Handle emergency with backup API"
-claude --provider test-env "Verify features in test environment"
+eval "$(ccvm env --provider backup-api)"
+claude "Handle emergency with backup API"
 
-# Parameter combinations
-claude -P anthropic-cn --debug "Chinese API debug mode"
-claude --provider custom-api --pp "Special operation bypassing permission checks"
+eval "$(ccvm env --provider test-env)" 
+claude "Verify features in test environment"
 
 # Quick multi-provider workflows
-claude -P fast-api "Rapid prototyping questions"      # Use fast API
-claude -P quality-api "Production-grade code review"  # Switch to high-quality API
-claude -P cost-api "Large data processing tasks"      # Switch to economical API
+eval "$(ccvm env --provider fast-api)"
+claude "Rapid prototyping questions"      # Use fast API
+
+eval "$(ccvm env --provider quality-api)"
+claude "Production-grade code review"     # Switch to high-quality API
+
+eval "$(ccvm env --provider cost-api)"
+claude "Large data processing tasks"      # Switch to economical API
 
 # Error recovery scenarios
-claude "Main task"                                   # Default API fails
-claude -P backup-api "Main task"                    # Quick switch to backup API
+eval "$(ccvm env)"
+claude "Main task"                        # Default API
+
+eval "$(ccvm env --provider backup-api)"
+claude "Main task"                        # Quick switch to backup API
 ```
 
 #### Team Collaboration Setup
@@ -201,8 +205,8 @@ ccvm status --detailed
 # Switch default provider
 ccvm use anthropic
 
-# View and manage backups
-ccvm history
+# Check system health
+ccvm doctor --fix
 ```
 
 #### MCP Service Management
@@ -229,47 +233,41 @@ claude mcp list
 CCVM (Claude Code Version Manager)
 ├── ConfigManager      # System configuration management
 ├── ProviderManager    # API provider management  
-├── BackupManager      # Backup and restore
-├── AliasGenerator     # Shell alias generation
-└── UpdateManager      # Configuration template updates
+├── MCPManager         # MCP service management
+└── Utils/             # Utility modules (banner, logger, validation, etc.)
 ```
 
 ### ⚡ Technical Implementation
 
-**Smart Claude Function Integration**
+**Dynamic Environment Loading**
 ```bash
-# CCVM redefines the claude function for seamless integration:
-claude() {
-    # 1. Dynamically load CCVM environment variables
-    eval "$(ccvm env 2>/dev/null)"
-    
-    # 2. Check configuration validity
-    if [ $? -ne 0 ]; then
-        echo "❌ Failed to load CCVM configuration"
-        return 1
-    fi
-    
-    # 3. Call native Claude command
-    command claude "$@"
-}
+# CCVM provides dynamic environment variable loading:
+
+# Method 1: Direct evaluation (recommended)
+eval "$(ccvm env)"
+claude "your question"
+
+# Method 2: Provider-specific temporary usage
+eval "$(ccvm env --provider custom-api)"
+claude "question for custom API"
+
+# Method 3: Shell-specific format
+eval "$(ccvm env --shell fish)"  # For fish shell users
 ```
 
 **Workflow**
-1. 📡 `ccvm env` outputs current provider's environment variable settings
-2. 🔧 claude function automatically loads these environment variables
-3. 🚀 Directly calls native Claude CLI, passing all arguments
-4. ✅ Completely transparent experience, no additional configuration needed
+1. 📡 `ccvm env` outputs shell-compatible environment variable exports
+2. 🔧 `eval` command loads these variables into current shell session
+3. 🚀 Native `claude` command automatically uses loaded environment variables
+4. ✅ Completely transparent experience, no configuration files needed
 
 **Configuration File Structure**
 ```
 ~/.claude/ccvm/
 ├── config.json        # System configuration
-├── history.json       # Operation history
 ├── providers/         # Provider configurations
-│   ├── anthropic.json
-│   └── custom.json
-└── backups/           # Automatic backups
-    └── 2025-08-26_10-30-45/
+│   ├── anthropic.json # Individual provider configs
+│   └── custom.json    # (with 600 permissions)
 ```
 
 ### 📚 CLI Commands Reference
@@ -283,9 +281,7 @@ claude() {
 | `ccvm remove <alias>` | Remove provider | `ccvm remove old-provider` |
 | `ccvm use [alias]` | Set/select default provider | `ccvm use anthropic` |
 | `ccvm env [--shell <shell>]` | Output environment variables | `ccvm env --shell bash` |
-| `ccvm exec` | Execute claude with current config | `ccvm exec "hello world"` |
-| `ccvm update [--force]` | Update configuration templates | `ccvm update --force` |
-| `ccvm history` | View/restore configuration backups | `ccvm history` |
+| `ccvm env [--provider <alias>]` | Output variables for specific provider | `ccvm env --provider custom` |
 | `ccvm status [--detailed]` | Show system status | `ccvm status --detailed` |
 | `ccvm doctor [--fix]` | Run system diagnostics | `ccvm doctor --fix` |
 | `ccvm mcp` | Manage MCP services for Claude Code | `ccvm mcp` |
@@ -323,13 +319,13 @@ ccvm/
 │   ├── core/          # Core managers
 │   │   ├── ConfigManager.js
 │   │   ├── ProviderManager.js
-│   │   ├── BackupManager.js
-│   │   ├── AliasGenerator.js
-│   │   └── UpdateManager.js
+│   │   └── MCPManager.js
 │   └── utils/         # Utility functions
 │       ├── banner.js  # ASCII art and banners
 │       ├── errorHandler.js
-│       └── logger.js
+│       ├── logger.js
+│       ├── Validator.js
+│       └── FileUtils.js
 ├── bin/               # CLI entry point
 ├── tests/             # Test files
 │   ├── unit/          # Unit tests

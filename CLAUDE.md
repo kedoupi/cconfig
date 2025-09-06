@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CCVM (Claude Code Version Manager) is a comprehensive configuration management toolkit for Claude Code that provides multi-provider API support, secure credential management, and automated shell integration. The project enables users to configure and switch between different API providers (like different Claude API endpoints) seamlessly.
 
+### Key Features
+- **Multi-Provider API Management**: Seamlessly switch between different Claude API endpoints
+- **Secure Credential Storage**: Safe API key management with 600 permissions
+- **Dynamic Environment Loading**: `ccvm env` command for shell integration  
+- **MCP Service Management**: Interactive management of Model Context Protocol services for Claude Code
+- **System Diagnostics**: Comprehensive health checks and issue diagnosis
+- **Intelligent CLI Integration**: Direct integration with native `claude` command
+
 ## Common Development Commands
 
 ### Testing
@@ -78,6 +86,7 @@ The system follows a modular architecture with three core managers:
 - **Purpose**: MCP (Model Context Protocol) service management for Claude Code
 - **Key Features**: Interactive MCP service management, configuration, integration
 - **Integration**: Provides `ccvm mcp` command interface
+- **Supported Services**: Filesystem MCP, Sequential Thinking, Memory Bank, Docker MCP, Context7, IDE integration
 
 ## Key Design Decisions
 
@@ -160,11 +169,13 @@ ccvm
 ├── remove <alias>          # Remove provider
 ├── use [alias]             # Set/select default provider
 ├── env [--shell <shell>]   # Output environment variables for current provider
-├── exec                    # Execute claude with current default configuration (legacy)
+│   [--provider <alias>]    # Specify provider for env output
 ├── status [--detailed]     # Show system status
 ├── doctor [--fix]          # Run system diagnostics
 └── mcp                     # Manage MCP services for Claude Code
 ```
+
+**Note**: The `exec` command has been removed in favor of direct `claude` command integration.
 
 ## Claude Integration Usage
 
