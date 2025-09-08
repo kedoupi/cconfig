@@ -122,6 +122,38 @@ class MCPManager {
         addCommand: 'claude mcp add context7 npx -- -y @upstash/context7-mcp@latest',
         scope: 'user',
         needsConfig: false
+      },
+      'figma': {
+        name: 'figma',
+        displayName: 'Figma Dev Mode MCP',
+        description: '连接到Figma开发者模式，获取设计文件和原型数据',
+        package: null, // 外部服务，不需要安装包
+        transport: 'sse',
+        recommended: true,
+        installCommand: null, // 不需要安装命令
+        addCommand: 'claude mcp add --transport sse figma-dev-mode-mcp-server {url}',
+        scope: 'user',
+        needsConfig: true,
+        configFields: [
+          {
+            name: 'url',
+            message: '请输入Figma MCP服务URL:',
+            default: 'http://127.0.0.1:3845/sse',
+            validate: (value) => {
+              try {
+                new URL(value);
+                // 检查协议
+                const url = new URL(value);
+                if (!['http:', 'https:'].includes(url.protocol)) {
+                  return '请输入有效的HTTP或HTTPS URL';
+                }
+                return true;
+              } catch {
+                return '请输入有效的URL格式';
+              }
+            }
+          }
+        ]
       }
     };
   }
@@ -407,7 +439,7 @@ class MCPManager {
       throw new Error(`未知的 MCP 服务: ${name}`);
     }
 
-    console.log(chalk.blue(`\n📦 安装 ${mcp.displayName} 到用户作用域...`));
+    console.log(chalk.blue(`\n📦 配置 ${mcp.displayName} 到用户作用域...`));
 
     // 1. 先安装包（根据不同的包管理器）
     if (mcp.installCommand) {
@@ -452,16 +484,21 @@ class MCPManager {
           return;
         }
       }
+    } else if (mcp.package === null) {
+      // 外部服务，不需要包安装
+      console.log(chalk.blue('这是外部服务，跳过包安装步骤...'));
     }
 
     // 2. 构建 claude mcp add 命令（硬编码为用户级别）
     let addCommand = mcp.addCommand.replace('claude mcp add', 'claude mcp add --scope user');
 
-    // 3. 处理环境变量配置
+    // 3. 处理配置字段（环境变量或URL参数）
     if (mcp.needsConfig && mcp.configFields) {
       console.log(chalk.yellow('需要配置以下信息：'));
       
       const envVars = [];
+      const urlReplacements = {};
+      
       for (const field of mcp.configFields) {
         const { value } = await inquirer.prompt([
           {
@@ -475,9 +512,19 @@ class MCPManager {
         ]);
         
         if (value && value.trim() !== '') {
-          // 使用 -e 参数格式
-          envVars.push(`-e ${field.name}="${value}"`);
+          // 检查是否是URL参数（用于命令替换）
+          if (field.name === 'url' && addCommand.includes('{url}')) {
+            urlReplacements.url = value;
+          } else {
+            // 使用 -e 参数格式的环境变量
+            envVars.push(`-e ${field.name}="${value}"`);
+          }
         }
+      }
+      
+      // 处理URL替换
+      for (const [key, value] of Object.entries(urlReplacements)) {
+        addCommand = addCommand.replace(`{${key}}`, value);
       }
       
       // 将环境变量添加到命令中

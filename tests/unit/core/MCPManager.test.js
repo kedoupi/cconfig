@@ -180,7 +180,10 @@ describe('MCPManager', () => {
       const services = Object.values(mcpManager.registry);
       
       services.forEach(service => {
-        expect(service.package).toMatch(/^@?[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9](\/[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])*$/);
+        // Skip external services (package: null)
+        if (service.package !== null) {
+          expect(service.package).toMatch(/^@?[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9](\/[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])*$/);
+        }
       });
     });
   });
