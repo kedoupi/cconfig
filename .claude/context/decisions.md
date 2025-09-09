@@ -267,6 +267,64 @@ Claude Code 引入 MCP (Model Context Protocol) 服务支持，需要集成和�
 
 ---
 
+## ADR-009: Chrome Browser MCP 集成策略
+
+**状态**: ✅ Accepted  
+**决策日期**: 2025-09-09  
+**决策者**: CCVM Development Team  
+
+### 问题描述
+Chrome MCP是一个浏览器自动化工具，需要Chrome扩展配合工作，其安装和配置流程比其他MCP服务更加复杂，需要特殊的集成方案。
+
+### 决策
+实施 **Chrome MCP 特殊集成模式**：
+- 使用SSE传输协议连接HTTP服务
+- 实现专用的安装向导 (`installChromeMCP`)
+- 提供连接测试和验证机制 (`testMCPConnection`)
+- 包含完整的用户指导和故障排除
+
+### 决策原因
+- **用户价值**: Chrome自动化功能对用户价值很高
+- **技术可行性**: HTTP/SSE连接方式成熟稳定
+- **用户体验**: 通过向导简化复杂的安装过程
+- **扩展性**: 为其他类似复杂MCP服务提供参考模式
+
+### 技术实现
+```javascript
+// 配置结构
+'chrome-browser': {
+  transport: 'sse',
+  requiresManualSetup: true,
+  setupInstructions: [...],
+  configFields: [...],
+  // 特殊处理逻辑
+}
+
+// 安装流程
+async installChromeMCP(mcp) {
+  // 5步安装向导
+  // 1. npm包检查和安装
+  // 2. Chrome扩展确认
+  // 3. MCP服务连接测试
+  // 4. URL配置
+  // 5. Claude Code集成
+}
+```
+
+### 后果
+- ✅ 成功集成复杂的浏览器自动化功能
+- ✅ 建立了复杂MCP服务的集成模式
+- ✅ 提升了用户对CCVM功能丰富性的认知
+- ⚠️ 增加了安装流程的复杂性
+- ⚠️ 需要维护Chrome扩展兼容性
+
+### 依赖
+- Chrome/Chromium浏览器
+- mcp-chrome-bridge npm包
+- hangwin/mcp-chrome GitHub项目
+
+---
+
 ## 废弃的决策
 
 ### ADR-003-DEPRECATED: 原 exec 命令设计

@@ -154,6 +154,43 @@ class MCPManager {
             }
           }
         ]
+      },
+      'chrome-browser': {
+        name: 'chrome-browser',
+        displayName: 'Chrome Browser MCP',
+        description: '将Chrome浏览器转为AI自动化工具，支持20+浏览器管理功能',
+        package: 'mcp-chrome-bridge',
+        transport: 'stdio',
+        recommended: true,
+        installCommand: 'npm install -g mcp-chrome-bridge',
+        addCommand: 'claude mcp add chrome-browser node -- {installPath}',
+        scope: 'user',
+        needsConfig: true,
+        requiresManualSetup: true, // 需要手动安装扩展
+        setupInstructions: [
+          '1. 从GitHub下载Chrome扩展: https://github.com/hangwin/mcp-chrome/releases',
+          '2. 打开 chrome://extensions/ 启用开发者模式',
+          '3. 点击"加载已解压的扩展程序"选择下载的扩展文件夹',
+          '4. 全局安装 mcp-chrome-bridge: npm install -g mcp-chrome-bridge',
+          '5. 查找安装路径: npm list -g mcp-chrome-bridge'
+        ],
+        configFields: [
+          {
+            name: 'installPath',
+            message: '请输入mcp-server-stdio.js的完整路径:',
+            default: '',
+            validate: (value) => {
+              if (!value || value.trim() === '') {
+                return '请输入有效的文件路径';
+              }
+              if (!value.includes('mcp-server-stdio.js')) {
+                return '路径应指向 mcp-server-stdio.js 文件';
+              }
+              return true;
+            }
+          }
+        ],
+        note: '需要Chrome或Chromium浏览器，stdio方式更稳定可靠'
       }
     };
   }
@@ -348,6 +385,7 @@ class MCPManager {
         break;
       case 'exit':
         process.exit(0);
+        break;
       default:
         // 未知操作，忽略
         break;
@@ -422,6 +460,251 @@ class MCPManager {
   }
 
   /**
+   * 安装Chrome MCP服务的特殊处理
+   * 
+   * @param {MCPServiceConfig} mcp - Chrome MCP服务配置
+   * @returns {Promise<void>}
+   * @private
+   */
+  async installChromeMCP(mcp) {
+    console.log(chalk.yellow.bold('\n🔧 Chrome MCP 需要额外步骤\n'));
+    
+    // 显示安装说明
+    console.log(chalk.blue('📋 完整安装步骤：'));
+    for (const instruction of mcp.setupInstructions) {
+      console.log(chalk.gray(`   ${instruction}`));
+    }
+    console.log('');
+    
+    // 步骤1: 检查npm包是否已安装
+    console.log(chalk.blue('步骤 1/5: 检查npm全局包...'));
+    try {
+      await this.#execCommand('mcp-chrome-bridge --version', { silent: true });
+      console.log(chalk.green('✅ mcp-chrome-bridge 已安装'));
+    } catch {
+      console.log(chalk.yellow('⚠️  mcp-chrome-bridge 未安装'));
+      
+      const { shouldInstall } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldInstall',
+          message: '是否现在安装 mcp-chrome-bridge？',
+          default: true
+        }
+      ]);
+      
+      if (shouldInstall) {
+        const spinner = ora('安装 mcp-chrome-bridge...').start();
+        try {
+          await this.#execCommand(mcp.installCommand, { silent: true });
+          spinner.succeed('mcp-chrome-bridge 安装成功');
+        } catch (error) {
+          spinner.fail('mcp-chrome-bridge 安装失败');
+          console.log(chalk.red(error.message));
+          return;
+        }
+      } else {
+        console.log(chalk.yellow('请手动安装后再继续：npm install -g mcp-chrome-bridge'));
+        return;
+      }
+    }
+    
+    // 步骤2: 确认Chrome扩展安装
+    console.log(chalk.blue('\n步骤 2/5: Chrome扩展安装确认...'));
+    const { extensionReady } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'extensionReady',
+        message: '是否已完成Chrome扩展安装并启动了MCP服务？',
+        default: false
+      }
+    ]);
+    
+    if (!extensionReady) {
+      console.log(chalk.yellow('\n请按照以下步骤安装Chrome扩展：'));
+      for (const instruction of mcp.setupInstructions) {
+        console.log(chalk.gray(`   ${instruction}`));
+      }
+      console.log(chalk.yellow('\n安装完成后请重新运行此命令'));
+      return;
+    }
+    
+    // 步骤3: 查找mcp-server-stdio.js路径
+    console.log(chalk.blue('\n步骤 3/5: 查找安装路径...'));
+    let mcpServerPath = '';
+    
+    try {
+      // 尝试查找npm全局安装路径
+      const npmResult = await this.#execCommand('npm list -g mcp-chrome-bridge', { silent: true });
+      const lines = npmResult.stdout.split('\n');
+      for (const line of lines) {
+        if (line.includes('mcp-chrome-bridge@')) {
+          // 提取路径信息，构建完整路径
+          const npmPrefix = await this.#execCommand('npm prefix -g', { silent: true });
+          const globalPath = npmPrefix.stdout.trim();
+          // npm全局包通常在lib/node_modules下
+          const possiblePaths = [
+            `${globalPath}/lib/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`,
+            `${globalPath}/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`
+          ];
+          
+          // 检查哪个路径存在
+          for (const path of possiblePaths) {
+            try {
+              await this.#execCommand(`ls "${path}"`, { silent: true });
+              mcpServerPath = path;
+              console.log(chalk.green(`✅ 找到安装路径: ${mcpServerPath}`));
+              break;
+            } catch {
+              continue;
+            }
+          }
+          
+          if (mcpServerPath) break;
+        }
+      }
+    } catch (error) {
+      console.log(chalk.yellow('⚠️  无法自动检测安装路径'));
+    }
+    
+    // 步骤4: 获取或确认安装路径
+    console.log(chalk.blue('\n步骤 4/5: 配置安装路径...'));
+    let installPath = mcpServerPath;
+    
+    if (!installPath) {
+      // 如果没有找到路径，询问用户手动输入
+      const { manualPath } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'manualPath',
+          message: '请输入mcp-server-stdio.js的完整路径:',
+          validate: (value) => {
+            if (!value || value.trim() === '') {
+              return '请输入有效的文件路径';
+            }
+            if (!value.includes('mcp-server-stdio.js')) {
+              return '路径应指向 mcp-server-stdio.js 文件';
+            }
+            return true;
+          }
+        }
+      ]);
+      installPath = manualPath;
+    } else {
+      // 确认自动检测的路径
+      const { useAutoPath } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'useAutoPath',
+          message: `使用自动检测的路径？\n${installPath}`,
+          default: true
+        }
+      ]);
+      
+      if (!useAutoPath) {
+        const { customPath } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'customPath',
+            message: '请输入自定义路径:',
+            default: installPath,
+            validate: (value) => {
+              if (!value || value.trim() === '') {
+                return '请输入有效的文件路径';
+              }
+              if (!value.includes('mcp-server-stdio.js')) {
+                return '路径应指向 mcp-server-stdio.js 文件';
+              }
+              return true;
+            }
+          }
+        ]);
+        installPath = customPath;
+      }
+    }
+    
+    // 步骤5: 添加到Claude Code
+    console.log(chalk.blue('\n步骤 5/5: 添加到Claude Code...'));
+    const addCommand = mcp.addCommand.replace('{installPath}', installPath).replace('claude mcp add', 'claude mcp add --scope user');
+    
+    console.log(chalk.gray(`执行: ${addCommand}`));
+    try {
+      const result = await this.#execCommand(addCommand);
+      console.log(chalk.green(`✅ ${mcp.displayName} 已添加到 Claude Code`));
+      if (result.stdout) {
+        console.log(chalk.gray(result.stdout));
+      }
+      
+      // 显示使用说明
+      console.log(chalk.green.bold('\n🎉 Chrome MCP 配置完成！'));
+      console.log(chalk.yellow('\n💡 使用示例：'));
+      console.log(chalk.gray('  • claude "截图当前网页"'));
+      console.log(chalk.gray('  • claude "分析这个页面的主要内容"'));
+      console.log(chalk.gray('  • claude "帮我填写这个表单"'));
+      console.log(chalk.gray('  • claude "关闭所有标签页"'));
+      
+    } catch (error) {
+      console.log(chalk.red(`❌ 添加失败: ${error.message}`));
+    }
+  }
+  
+  /**
+   * 测试MCP服务连接
+   * 
+   * @param {string} url - MCP服务URL
+   * @returns {Promise<{success: boolean, error?: string}>}
+   * @private
+   */
+  async testMCPConnection(url) {
+    // 尝试多个可能的端点
+    const testUrls = [
+      url,
+      url.replace('/mcp', ''),
+      'http://127.0.0.1:12306',
+      'http://127.0.0.1:12306/mcp',
+      'http://127.0.0.1:12306/sse'
+    ];
+    
+    for (const testUrl of testUrls) {
+      try {
+        console.log(chalk.gray(`  尝试连接: ${testUrl}`));
+        const result = await this.#execCommand(`curl -s --connect-timeout 3 -I "${testUrl}"`, { 
+          timeout: 5000, 
+          silent: true 
+        });
+        
+        // 检查HTTP状态码
+        if (result.stdout.includes('200') || result.stdout.includes('HTTP')) {
+          console.log(chalk.green(`  ✅ 连接成功: ${testUrl}`));
+          return { success: true, workingUrl: testUrl };
+        }
+      } catch (error) {
+        console.log(chalk.gray(`  ❌ 连接失败: ${testUrl}`));
+        continue;
+      }
+    }
+    
+    // 最后尝试使用telnet测试端口可达性
+    try {
+      console.log(chalk.gray('  尝试端口连通性测试...'));
+      await this.#execCommand('nc -z 127.0.0.1 12306', { 
+        timeout: 3000, 
+        silent: true 
+      });
+      console.log(chalk.yellow('  ⚠️  端口12306可达，但HTTP服务可能未就绪'));
+      return { 
+        success: false, 
+        error: '端口可达但HTTP服务响应异常，请检查Chrome扩展是否正确启动MCP服务'
+      };
+    } catch {
+      return { 
+        success: false, 
+        error: '无法连接到端口12306，请确认Chrome扩展已启动MCP服务器'
+      };
+    }
+  }
+
+  /**
    * 安装单个MCP服务
    * 
    * @param {string} name - 服务名称
@@ -437,6 +720,11 @@ class MCPManager {
     const mcp = this.registry[name];
     if (!mcp) {
       throw new Error(`未知的 MCP 服务: ${name}`);
+    }
+
+    // 特殊处理Chrome MCP
+    if (name === 'chrome-browser' && mcp.requiresManualSetup) {
+      return await this.installChromeMCP(mcp);
     }
 
     console.log(chalk.blue(`\n📦 配置 ${mcp.displayName} 到用户作用域...`));

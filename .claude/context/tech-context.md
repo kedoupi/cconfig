@@ -158,6 +158,8 @@ claude "using custom provider"
 - **顺序思考 MCP**: 结构化思维过程
 - **Docker MCP**: 容器管理集成
 - **Context7**: 文档上下文服务
+- **Chrome Browser MCP**: 浏览器自动化和网页交互 (新增)
+- **Figma MCP**: 设计文件和原型数据访问
 - **IDE 集成**: VS Code 等开发环境支持
 
 ## 性能和可扩展性

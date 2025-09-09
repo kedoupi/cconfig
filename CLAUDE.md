@@ -108,7 +108,35 @@ The system follows a modular architecture with three core managers:
 - **Purpose**: MCP (Model Context Protocol) service management for Claude Code
 - **Key Features**: Interactive MCP service management, configuration, integration
 - **Integration**: Provides `ccvm mcp` command interface
-- **Supported Services**: Filesystem MCP, Sequential Thinking, Docker MCP, Context7, IDE integration
+- **Supported Services**: Filesystem MCP, Sequential Thinking, Docker MCP, Context7, Chrome Browser MCP, Figma MCP
+
+#### Chrome Browser MCP Integration
+CCVM提供了Chrome浏览器自动化的深度集成：
+
+**特殊安装流程**:
+- **Chrome扩展**: 需要从GitHub手动下载并安装浏览器扩展
+- **npm全局包**: 自动安装`mcp-chrome-bridge`包
+- **服务启动**: 通过浏览器扩展启动本地HTTP服务
+- **连接测试**: 自动验证MCP服务连接状态
+
+**功能特性**:
+- **20+ 浏览器工具**: 截图、标签管理、内容分析、表单填写
+- **跨标签上下文**: 语义搜索和内容关联
+- **网络监控**: 请求拦截和分析
+- **隐私保护**: 完全本地运行，不向外发送数据
+
+**使用方式**:
+```bash
+# 通过CCVM安装和配置
+ccvm mcp
+# 选择"Chrome Browser MCP"并按向导完成设置
+
+# 使用示例
+claude "截图当前网页"
+claude "分析这个页面的主要内容"  
+claude "帮我填写这个表单"
+claude "关闭所有标签页"
+```
 
 ## Key Design Decisions
 
