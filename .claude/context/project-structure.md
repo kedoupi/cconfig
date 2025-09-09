@@ -14,7 +14,6 @@ ccvm/
 ├── src/                    # 源代码
 ├── tests/                  # 测试文件
 ├── tools/                  # 工具脚本
-├── docs/                   # 项目文档
 ├── claude-templates/       # Claude Code 模板
 ├── .claude/               # Claude Code 配置
 ├── node_modules/          # 依赖包

@@ -18,6 +18,8 @@ author: Claude (context-creation)
 - ✅ 核心架构重构和优化完成
 - ✅ MCP 服务管理系统集成
 - ✅ Chrome Browser MCP 集成完成 (2025-09-09)
+- ✅ 安装脚本优化：移除历史兼容代码，智能npm依赖检测 (2025-09-09)
+- ✅ Chrome MCP路径检测改进：支持nvm等版本管理器 (2025-09-09)
 - ✅ 全面的测试覆盖 (70%+)
 - ✅ 完整的 Claude Code 集成支持
 - ✅ 文档体系建立和完善

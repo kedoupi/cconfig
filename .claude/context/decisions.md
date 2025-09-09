@@ -318,6 +318,50 @@ async installChromeMCP(mcp) {
 - ⚠️ 增加了安装流程的复杂性
 - ⚠️ 需要维护Chrome扩展兼容性
 
+---
+
+## ADR-011: 简化安装脚本和移除历史兼容代码
+- **状态**: 已决定并实施
+- **日期**: 2025-09-09
+- **决策者**: 开发团队
+
+### 背景
+安装脚本(install.sh)中包含了大量历史兼容代码：
+- `migrate_old_config`: 从 ~/.ccvm 迁移到 ~/.claude/ccvm
+- `backup_existing_config`: 备份现有Claude配置
+- `backup_directory`: 备份辅助函数
+
+这些代码已经不再需要，因为：
+- 新用户不会有旧配置需要迁移
+- 老用户已经完成迁移
+- 安装脚本不会覆盖用户配置，无需备份
+
+### 决策
+**移除所有历史兼容代码**，简化安装流程：
+1. 删除迁移和备份相关函数
+2. 优化开发模式npm install逻辑
+3. 改进Chrome MCP路径检测算法
+
+### 技术改进
+```bash
+# 开发模式智能npm检测
+if [[ ! -d "$SCRIPT_DIR/node_modules" ]]; then
+    npm install  # 仅在需要时安装
+fi
+
+# Chrome MCP路径检测增强
+- 使用 npm list -g 精确获取路径
+- 支持nvm等版本管理器
+- 提供fallback搜索机制
+```
+
+### 后果
+- ✅ 代码量减少30行，提高可维护性
+- ✅ 安装速度提升（跳过不必要的检查）
+- ✅ 解决了nvm环境下的路径检测问题
+- ✅ 代码逻辑更清晰简洁
+- ⚠️ 不再支持从旧版本迁移（可接受）
+
 ### 依赖
 - Chrome/Chromium浏览器
 - mcp-chrome-bridge npm包
