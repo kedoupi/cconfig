@@ -534,37 +534,65 @@ class MCPManager {
     let mcpServerPath = '';
     
     try {
-      // 尝试查找npm全局安装路径
-      const npmResult = await this.#execCommand('npm list -g mcp-chrome-bridge', { silent: true });
-      const lines = npmResult.stdout.split('\n');
-      for (const line of lines) {
-        if (line.includes('mcp-chrome-bridge@')) {
-          // 提取路径信息，构建完整路径
-          const npmPrefix = await this.#execCommand('npm prefix -g', { silent: true });
-          const globalPath = npmPrefix.stdout.trim();
-          // npm全局包通常在lib/node_modules下
+      // 方法1: 使用 npm list -g 获取准确路径
+      const npmResult = await this.#execCommand('npm list -g mcp-chrome-bridge --depth=0', { silent: true });
+      
+      if (npmResult.stdout.includes('mcp-chrome-bridge@')) {
+        // 从第一行提取npm全局目录
+        const firstLine = npmResult.stdout.split('\n')[0];
+        if (firstLine && firstLine.includes('/')) {
+          // 构建可能的路径
+          const npmGlobalDir = firstLine.trim();
           const possiblePaths = [
-            `${globalPath}/lib/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`,
-            `${globalPath}/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`
+            `${npmGlobalDir}/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`,
+            // 处理 nvm 等环境管理器的路径结构
+            `${npmGlobalDir}/lib/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`
           ];
           
           // 检查哪个路径存在
-          for (const path of possiblePaths) {
+          for (const testPath of possiblePaths) {
             try {
-              await this.#execCommand(`ls "${path}"`, { silent: true });
-              mcpServerPath = path;
-              console.log(chalk.green(`✅ 找到安装路径: ${mcpServerPath}`));
-              break;
+              const result = await this.#execCommand(`test -f "${testPath}"`, { silent: true });
+              if (result.stderr === '') { // 文件存在
+                mcpServerPath = testPath;
+                console.log(chalk.green(`✅ 找到安装路径: ${mcpServerPath}`));
+                break;
+              }
             } catch {
               continue;
             }
           }
-          
-          if (mcpServerPath) break;
         }
       }
+      
+      // 方法2: 如果方法1失败，使用 find 命令搜索
+      if (!mcpServerPath) {
+        const findResult = await this.#execCommand('find $(npm prefix -g) -name "mcp-server-stdio.js" 2>/dev/null | head -1', { silent: true });
+        if (findResult.stdout && findResult.stdout.trim()) {
+          mcpServerPath = findResult.stdout.trim();
+          console.log(chalk.green(`✅ 通过搜索找到路径: ${mcpServerPath}`));
+        }
+      }
+      
     } catch (error) {
-      console.log(chalk.yellow('⚠️  无法自动检测安装路径'));
+      console.log(chalk.yellow('⚠️  自动检测路径失败，将手动输入'));
+    }
+    
+    // 方法3: 如果仍然没找到，提供常见路径选择
+    if (!mcpServerPath) {
+      const npmPrefix = await this.#execCommand('npm prefix -g', { silent: true }).catch(() => ({ stdout: '' }));
+      if (npmPrefix.stdout.trim()) {
+        const globalPath = npmPrefix.stdout.trim();
+        const commonPaths = [
+          `${globalPath}/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`,
+          `${globalPath}/lib/node_modules/mcp-chrome-bridge/dist/mcp/mcp-server-stdio.js`
+        ];
+        
+        console.log(chalk.yellow('常见安装路径:'));
+        for (let i = 0; i < commonPaths.length; i++) {
+          console.log(chalk.gray(`  ${i + 1}. ${commonPaths[i]}`));
+        }
+      }
     }
     
     // 步骤4: 获取或确认安装路径

@@ -95,19 +95,6 @@ is_interactive() {
     [[ -t 0 && -t 1 ]]
 }
 
-backup_directory() {
-    local src=$1
-    local backup_base=$2
-    local timestamp=$(date +%Y%m%d_%H%M%S)
-    local backup_dir="${backup_base}_${timestamp}"
-    
-    if [[ -d "$src" ]]; then
-        cp -r "$src" "$backup_dir"
-        log INFO "已备份到: $backup_dir"
-        echo "$backup_dir"
-    fi
-}
-
 # ============================================================================
 # 依赖检查
 # ============================================================================
@@ -143,42 +130,6 @@ check_dependencies() {
     
     if ! command_exists jq; then
         log WARN "建议安装 jq 以获得更好的体验"
-    fi
-}
-
-# ============================================================================
-# 配置迁移
-# ============================================================================
-
-migrate_old_config() {
-    # 迁移旧的 ~/.ccvm 到新位置
-    if [[ -d "${HOME}/.ccvm" && ! -d "$CCVM_DIR" ]]; then
-        log INFO "迁移旧配置 ~/.ccvm -> ~/.claude/ccvm..."
-        
-        mkdir -p "$CCVM_DIR"
-        cp -r "${HOME}/.ccvm/"* "$CCVM_DIR/" 2>/dev/null || true
-        
-        local old_backup=$(backup_directory "${HOME}/.ccvm" "${HOME}/.ccvm_backup")
-        rm -rf "${HOME}/.ccvm"
-        
-        log SUCCESS "配置已迁移，旧配置备份至: $old_backup"
-    fi
-}
-
-backup_existing_config() {
-    if [[ -d "$CLAUDE_DIR" && ! -f "$CCVM_DIR/.installed_by_ccvm" ]]; then
-        local backup_dir="$CCVM_DIR/claude_backup/$(date +%Y%m%d_%H%M%S)"
-        
-        log INFO "备份现有 Claude 配置..."
-        mkdir -p "$backup_dir"
-        
-        for item in "$CLAUDE_DIR"/*; do
-            if [[ -e "$item" && "$(basename "$item")" != "ccvm" ]]; then
-                cp -r "$item" "$backup_dir/" 2>/dev/null || true
-            fi
-        done
-        
-        log SUCCESS "已备份到: $backup_dir"
     fi
 }
 
@@ -240,8 +191,13 @@ install_dev_mode() {
     # 安装 Claude Code 增强配置
     install_claude_config "$SCRIPT_DIR/claude-templates"
     
-    log INFO "安装开发依赖..."
-    (cd "$SCRIPT_DIR" && npm install --loglevel=error >/dev/null 2>&1) && log SUCCESS "依赖已安装" || log WARN "依赖安装失败"
+    # 检查是否已有node_modules
+    if [[ ! -d "$SCRIPT_DIR/node_modules" ]]; then
+        log INFO "安装开发依赖..."
+        (cd "$SCRIPT_DIR" && npm install --loglevel=error >/dev/null 2>&1) && log SUCCESS "依赖已安装" || log WARN "依赖安装失败"
+    else
+        log INFO "开发依赖已存在，跳过安装"
+    fi
 }
 
 install_prod_mode() {
@@ -294,7 +250,6 @@ install_ccvm() {
     # 确保目录结构（不会覆盖已存在的配置）
     mkdir -p "$CLAUDE_DIR"
     mkdir -p "$CCVM_DIR/providers"
-    mkdir -p "$CCVM_DIR/backups"
     mkdir -p "$CCVM_DIR/mcp"
     
     
@@ -476,7 +431,30 @@ has_existing_providers() {
 
 setup_first_provider() {
     if has_existing_providers; then
-        log INFO "检测到现有 provider 配置，跳过初始设置"
+        log INFO "检测到现有 provider 配置"
+        
+        # 显示现有的providers
+        local provider_count=0
+        local default_provider=""
+        
+        if [[ -d "$CCVM_DIR/providers" ]]; then
+            for file in "$CCVM_DIR/providers"/*.json; do
+                if [[ -f "$file" ]]; then
+                    ((provider_count++)) || true
+                    local provider_name=$(basename "$file" .json)
+                    echo "  ✅ $provider_name"
+                fi
+            done
+        fi
+        
+        if [[ -f "$CCVM_DIR/config.json" ]] && command_exists jq; then
+            default_provider=$(jq -r '.defaultProvider // ""' "$CCVM_DIR/config.json" 2>/dev/null)
+            if [[ -n "$default_provider" ]]; then
+                log INFO "默认 provider: $default_provider"
+            fi
+        fi
+        
+        log SUCCESS "已保留 $provider_count 个现有配置"
         return 0
     fi
     
@@ -567,8 +545,6 @@ main() {
     
     # 执行安装步骤
     check_dependencies
-    migrate_old_config
-    backup_existing_config
     install_ccvm
     create_shell_functions
     install_cli_tools
