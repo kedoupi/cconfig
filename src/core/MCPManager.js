@@ -514,7 +514,7 @@ class MCPManager {
     console.log('');
     
     // 步骤1: 检查npm包是否已安装
-    console.log(chalk.blue('步骤 1/5: 检查npm全局包...'));
+    console.log(chalk.blue('步骤 1/6: 检查npm全局包...'));
     try {
       await this.#execCommand('mcp-chrome-bridge --version', { silent: true });
       console.log(chalk.green('✅ mcp-chrome-bridge 已安装'));
@@ -546,8 +546,20 @@ class MCPManager {
       }
     }
     
-    // 步骤2: 确认Chrome扩展安装
-    console.log(chalk.blue('\n步骤 2/5: Chrome扩展安装确认...'));
+    // 步骤2: 注册MCP服务
+    console.log(chalk.blue('\n步骤 2/6: 启动MCP服务注册...'));
+    try {
+      const spinner = ora('启动 mcp-chrome-bridge 注册服务...').start();
+      await this.#execCommand('mcp-chrome-bridge register', { silent: true });
+      spinner.succeed('MCP服务注册成功');
+      console.log(chalk.green('✅ mcp-chrome-bridge 服务已启动'));
+    } catch (error) {
+      console.log(chalk.yellow('⚠️  MCP服务注册失败或已在运行'));
+      console.log(chalk.gray('如果服务已在运行，这是正常的'));
+    }
+    
+    // 步骤3: 确认Chrome扩展安装
+    console.log(chalk.blue('\n步骤 3/6: Chrome扩展安装确认...'));
     const { extensionReady } = await inquirer.prompt([
       {
         type: 'confirm',
@@ -566,8 +578,8 @@ class MCPManager {
       return;
     }
     
-    // 步骤3: 查找mcp-server-stdio.js路径
-    console.log(chalk.blue('\n步骤 3/5: 查找安装路径...'));
+    // 步骤4: 查找mcp-server-stdio.js路径
+    console.log(chalk.blue('\n步骤 4/6: 查找安装路径...'));
     let mcpServerPath = '';
     
     try {
@@ -632,8 +644,8 @@ class MCPManager {
       }
     }
     
-    // 步骤4: 获取或确认安装路径
-    console.log(chalk.blue('\n步骤 4/5: 配置安装路径...'));
+    // 步骤5: 获取或确认安装路径
+    console.log(chalk.blue('\n步骤 5/6: 配置安装路径...'));
     let installPath = mcpServerPath;
     
     if (!installPath) {
@@ -688,8 +700,8 @@ class MCPManager {
       }
     }
     
-    // 步骤5: 添加到Claude Code
-    console.log(chalk.blue('\n步骤 5/5: 添加到Claude Code...'));
+    // 步骤6: 添加到Claude Code
+    console.log(chalk.blue('\n步骤 6/6: 添加到Claude Code...'));
     const addCommand = mcp.addCommand.replace('{installPath}', installPath).replace('claude mcp add', 'claude mcp add --scope user');
     
     console.log(chalk.gray(`执行: ${addCommand}`));

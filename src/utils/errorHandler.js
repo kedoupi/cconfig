@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const Logger = require('./logger');
 const errorCodes = require('./errorCodes');
+const ChineseErrorHandler = require('./ChineseErrorHandler');
 
 /**
  * 统一错误处理器
@@ -181,6 +182,77 @@ class ErrorHandler {
     }
     
     return message;
+  }
+
+  /**
+   * 静态方法：中文化错误处理 - 直接使用中文错误处理器
+   * 
+   * @param {Error|string} error - 错误对象或错误代码
+   * @param {string} [context=''] - 错误上下文
+   * @param {boolean} [verbose=false] - 是否显示详细信息
+   */
+  static handleChinese(error, context = '', verbose = false) {
+    ChineseErrorHandler.handleError(error, context, verbose);
+  }
+
+  /**
+   * 静态方法：中文化网络错误处理
+   * 
+   * @param {Error} error - 网络错误对象
+   * @param {string} [url=''] - 请求的URL
+   */
+  static handleNetworkErrorChinese(error, url = '') {
+    ChineseErrorHandler.handleNetworkError(error, url);
+  }
+
+  /**
+   * 静态方法：中文化认证错误处理
+   * 
+   * @param {number} statusCode - HTTP状态码
+   * @param {Object} response - 响应对象
+   */
+  static handleAuthErrorChinese(statusCode, response) {
+    ChineseErrorHandler.handleAuthError(statusCode, response);
+  }
+
+  /**
+   * 静态方法：中文化配置错误处理
+   * 
+   * @param {Error} error - 配置错误对象
+   * @param {string} [configPath=''] - 配置文件路径
+   */
+  static handleConfigErrorChinese(error, configPath = '') {
+    ChineseErrorHandler.handleConfigError(error, configPath);
+  }
+
+  /**
+   * 静态方法：显示中文化成功消息
+   * 
+   * @param {string} message - 成功消息
+   * @param {Array<string>} [details=[]] - 详细信息列表
+   */
+  static showSuccess(message, details = []) {
+    ChineseErrorHandler.showSuccess(message, details);
+  }
+
+  /**
+   * 静态方法：显示中文化警告消息
+   * 
+   * @param {string} message - 警告消息
+   * @param {Array<string>} [suggestions=[]] - 建议列表
+   */
+  static showWarning(message, suggestions = []) {
+    ChineseErrorHandler.showWarning(message, suggestions);
+  }
+
+  /**
+   * 静态方法：显示中文化信息提示
+   * 
+   * @param {string} message - 信息消息
+   * @param {string} [icon='ℹ️'] - 图标
+   */
+  static showInfo(message, icon = 'ℹ️') {
+    ChineseErrorHandler.showInfo(message, icon);
   }
 
   /**

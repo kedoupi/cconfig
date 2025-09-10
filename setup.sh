@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# CCVM (Claude Code Version Manager) - 优化安装脚本
-# 版本通过 package.json 动态获取
+# CCVM (Claude Code Version Manager) - 配置安装脚本  
+# 由install.sh调用，负责实际的配置和安装工作
 
 set -euo pipefail
 
@@ -11,8 +11,6 @@ set -euo pipefail
 
 readonly CLAUDE_DIR="${HOME}/.claude"
 readonly CCVM_DIR="${CLAUDE_DIR}/ccvm"
-readonly GITHUB_REPO="kedoupi/ccvm"
-readonly GITHUB_BRANCH="${CCVM_BRANCH:-main}"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$PWD}")" && pwd)"
 
 # 颜色定义
@@ -21,6 +19,12 @@ readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
 readonly NC='\033[0m'
+
+# 安装模式（由install.sh传入）
+INSTALL_MODE="${1:-dev}"
+
+# 源代码目录（生产模式下由install.sh设置）
+CCVM_SOURCE_DIR="${CCVM_SOURCE_DIR:-$SCRIPT_DIR}"
 
 # ============================================================================
 # 日志函数
@@ -48,29 +52,12 @@ command_exists() {
 
 get_version() {
     local cmd=$1
-    local version_output
+    local version_flag=${2:---version}
     
-    # 获取版本输出
-    version_output=$($cmd --version 2>/dev/null) || echo ""
-    
-    if [[ -z "$version_output" ]]; then
-        echo "unknown"
-        return
-    fi
-    
-    # 提取版本号（支持多种格式）
-    # 格式1: 1.0.100 (Claude Code)
-    # 格式2: ccline 1.0.4
-    # 格式3: v1.0.0 或 1.0.0
-    echo "$version_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown"
-}
-
-detect_mode() {
-    # When run via curl | bash, SCRIPT_DIR will be PWD, so check for dev files there
-    if [[ -f "${SCRIPT_DIR}/bin/ccvm.js" && -f "${SCRIPT_DIR}/package.json" ]]; then
-        echo "dev"
+    if command_exists "$cmd"; then
+        "$cmd" "$version_flag" 2>/dev/null | head -n1 | grep -o '[0-9][0-9.]*' | head -n1
     else
-        echo "prod"
+        echo "未安装"
     fi
 }
 
@@ -92,56 +79,60 @@ detect_shell_config() {
             fi
             ;;
         fish)
-            echo "${HOME}/.config/fish/config.fish"
+            echo "$HOME/.config/fish/config.fish"
             ;;
         *)
-            # 未知shell类型，回退到通用配置
-            echo "${HOME}/.profile"
+            # 检查当前运行环境的shell版本变量
+            if [[ -n "${ZSH_VERSION:-}" ]]; then
+                echo "${ZDOTDIR:-$HOME}/.zshrc"
+            elif [[ -n "${BASH_VERSION:-}" ]]; then
+                if [[ -f "$HOME/.bash_profile" ]]; then
+                    echo "$HOME/.bash_profile"
+                else
+                    echo "$HOME/.bashrc"
+                fi
+            elif [[ -n "${FISH_VERSION:-}" ]]; then
+                echo "$HOME/.config/fish/config.fish"
+            else
+                # 检查哪个配置文件实际存在并且最近被修改
+                local configs=("$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.bashrc")
+                local newest=""
+                local newest_time=0
+                
+                for config in "${configs[@]}"; do
+                    if [[ -f "$config" ]]; then
+                        local mtime
+                        if [[ "$OSTYPE" == "darwin"* ]]; then
+                            mtime=$(stat -f "%m" "$config" 2>/dev/null || echo 0)
+                        else
+                            mtime=$(stat -c "%Y" "$config" 2>/dev/null || echo 0)
+                        fi
+                        if [[ $mtime -gt $newest_time ]]; then
+                            newest="$config"
+                            newest_time=$mtime
+                        fi
+                    fi
+                done
+                
+                # 如果找到了最近修改的配置文件，使用它
+                if [[ -n "$newest" ]]; then
+                    echo "$newest"
+                else
+                    # 最后的默认选择 - 现代用户多用zsh
+                    echo "$HOME/.zshrc"
+                fi
+            fi
             ;;
     esac
 }
 
 is_interactive() {
-    [[ -t 0 && -t 1 ]]
+    [[ -t 0 && -t 1 ]] && command_exists tput && [[ $(tput colors) -gt 0 ]]
 }
 
 # ============================================================================
-# 依赖检查
+# 配置安装函数 - 从install.sh迁移
 # ============================================================================
-
-check_node_version() {
-    if ! command_exists node; then
-        log ERROR "需要 Node.js 18+。请访问: https://nodejs.org/"
-    fi
-    
-    local node_version=$(node --version | sed 's/v//' | cut -d. -f1)
-    if [[ "$node_version" -lt 18 ]]; then
-        log ERROR "Node.js 版本过低 (v$node_version)，需要 v18+"
-    fi
-    
-    log SUCCESS "Node.js $(node --version) 符合要求"
-}
-
-check_dependencies() {
-    log INFO "检查系统依赖..."
-    
-    check_node_version
-    
-    local mode=$(detect_mode)
-    if [[ "$mode" == "prod" ]]; then
-        if ! command_exists git; then
-            log ERROR "生产模式需要 git"
-        fi
-        
-        if ! command_exists curl && ! command_exists wget; then
-            log ERROR "需要 curl 或 wget"
-        fi
-    fi
-    
-    if ! command_exists jq; then
-        log WARN "建议安装 jq 以获得更好的体验"
-    fi
-}
 
 install_claude_config() {
     local source_claude_dir=$1
@@ -185,100 +176,6 @@ install_claude_config() {
     
     log SUCCESS "Claude Code 增强配置已安装到 ~/.claude/ (包含 agents, commands, context 等)"
 }
-
-# ============================================================================
-# 核心安装
-# ============================================================================
-
-# 备份和恢复函数已简化，因为不再需要
-# 生产模式现在只更新代码文件，自动保留用户配置
-
-install_dev_mode() {
-    log INFO "开发模式：链接到 $SCRIPT_DIR"
-    
-    echo "$SCRIPT_DIR" > "$CCVM_DIR/dev_path"
-    
-    # 安装 Claude Code 增强配置
-    install_claude_config "$SCRIPT_DIR/claude-templates"
-    
-    # 检查是否已有node_modules
-    if [[ ! -d "$SCRIPT_DIR/node_modules" ]]; then
-        log INFO "安装开发依赖..."
-        (cd "$SCRIPT_DIR" && npm install --loglevel=error >/dev/null 2>&1) && log SUCCESS "依赖已安装" || log WARN "依赖安装失败"
-    else
-        log INFO "开发依赖已存在，跳过安装"
-    fi
-}
-
-install_prod_mode() {
-    log INFO "生产模式：从 GitHub 更新..."
-    
-    local temp_dir="${CCVM_DIR}.tmp.$$"
-    
-    if git clone "https://github.com/${GITHUB_REPO}.git" "$temp_dir"; then
-        (cd "$temp_dir" && git checkout "$GITHUB_BRANCH" 2>/dev/null || true)
-        
-        # 确保目标目录存在
-        mkdir -p "$CCVM_DIR"
-        
-        # 只更新代码文件，保留用户配置
-        log INFO "更新代码文件..."
-        
-        # 要更新的目录和文件列表（移除 .claude，单独处理）
-        local update_items=("bin" "src" "tests" "tools" "package.json" "package-lock.json" "README.md" "LICENSE")
-        
-        for item in "${update_items[@]}"; do
-            if [[ -e "$temp_dir/$item" ]]; then
-                # 如果是目录，先删除旧的再复制新的
-                if [[ -d "$temp_dir/$item" ]]; then
-                    rm -rf "$CCVM_DIR/$item" 2>/dev/null || true
-                fi
-                cp -r "$temp_dir/$item" "$CCVM_DIR/" 2>/dev/null || true
-                log INFO "已更新: $item"
-            fi
-        done
-        
-        # 安装 Claude Code 增强配置
-        install_claude_config "$temp_dir/claude-templates"
-        
-        # 清理临时目录
-        rm -rf "$temp_dir"
-        
-        log INFO "安装依赖..."
-        (cd "$CCVM_DIR" && npm install --production --loglevel=error >/dev/null 2>&1) || \
-            (cd "$CCVM_DIR" && npm install --loglevel=error >/dev/null 2>&1) || \
-            log ERROR "依赖安装失败"
-    else
-        log ERROR "克隆仓库失败"
-    fi
-}
-
-install_ccvm() {
-    local mode=$(detect_mode)
-    log INFO "安装模式: $mode"
-    
-    # 确保目录结构（不会覆盖已存在的配置）
-    mkdir -p "$CLAUDE_DIR"
-    mkdir -p "$CCVM_DIR/providers"
-    mkdir -p "$CCVM_DIR/mcp"
-    
-    
-    # 根据模式安装
-    if [[ "$mode" == "dev" ]]; then
-        install_dev_mode
-    else
-        install_prod_mode
-    fi
-    
-    # 创建安装标记
-    echo "$(date): CCVM installation" > "$CCVM_DIR/.installed_by_ccvm"
-    
-    log SUCCESS "CCVM 核心安装完成"
-}
-
-# ============================================================================
-# Shell 配置
-# ============================================================================
 
 get_ccvm_bin_path() {
     if [[ -f "$CCVM_DIR/dev_path" ]]; then
@@ -373,10 +270,6 @@ EOF
     log SUCCESS "Shell 函数已配置"
 }
 
-# ============================================================================
-# CLI 工具安装
-# ============================================================================
-
 install_npm_package() {
     local package=$1
     local cmd=${2:-$(echo "$package" | cut -d/ -f2 | cut -d@ -f1)}
@@ -422,10 +315,6 @@ install_cli_tools() {
     
     install_npm_package "ccusage" "ccusage" || true
 }
-
-# ============================================================================
-# 初始配置
-# ============================================================================
 
 has_existing_providers() {
     local count=0
@@ -500,12 +389,7 @@ setup_first_provider() {
     fi
 }
 
-# ============================================================================
-# 完成信息
-# ============================================================================
-
 show_completion() {
-    local mode=$(detect_mode)
     local shell_config=$(detect_shell_config | sed "s|$HOME|~|g")
     
     echo
@@ -515,7 +399,7 @@ show_completion() {
     echo
     
     echo -e "${GREEN}✨ 已完成:${NC}"
-    echo "  ✅ CCVM 核心 ($mode 模式)"
+    echo "  ✅ CCVM 核心 ($INSTALL_MODE 模式)"
     echo "  ✅ Shell 函数 (ccvm + claude)"
     echo "  ✅ Claude Code CLI"
     echo "  ✅ ccusage (使用统计分析工具)"
@@ -538,31 +422,106 @@ show_completion() {
     echo
     
     echo -e "${BLUE}📖 更多信息:${NC}"
-    echo "  GitHub: https://github.com/$GITHUB_REPO"
+    echo "  GitHub: https://github.com/kedoupi/ccvm"
     echo
 }
 
 # ============================================================================
-# 主函数
+# 主配置流程
 # ============================================================================
 
-main() {
-    echo "🚀 =================================================="
-    echo "   CCVM (Claude Code Version Manager)"
-    echo "   智能 Claude API 配置管理"
-    echo "=================================================="
-    echo
+# ============================================================================
+# 安装模式函数
+# ============================================================================
+
+install_dev_mode() {
+    log INFO "开发模式：链接到 $CCVM_SOURCE_DIR"
     
-    # 执行安装步骤
-    check_dependencies
+    echo "$CCVM_SOURCE_DIR" > "$CCVM_DIR/dev_path"
+    
+    # 安装 Claude Code 增强配置
+    install_claude_config "$CCVM_SOURCE_DIR/claude-templates"
+    
+    # 检查是否已有node_modules
+    if [[ ! -d "$CCVM_SOURCE_DIR/node_modules" ]]; then
+        log INFO "安装开发依赖..."
+        (cd "$CCVM_SOURCE_DIR" && npm install --loglevel=error >/dev/null 2>&1) && log SUCCESS "依赖已安装" || log WARN "依赖安装失败"
+    else
+        log INFO "开发依赖已存在，跳过安装"
+    fi
+}
+
+install_prod_mode() {
+    log INFO "生产模式：安装到系统目录..."
+    
+    # 源代码已经由install.sh下载到CCVM_SOURCE_DIR
+    if [[ ! -d "$CCVM_SOURCE_DIR" ]]; then
+        log ERROR "源代码目录不存在: $CCVM_SOURCE_DIR"
+    fi
+    
+    # 确保目标目录存在
+    mkdir -p "$CCVM_DIR"
+    
+    # 只更新代码文件，保留用户配置
+    log INFO "复制代码文件..."
+    
+    # 要复制的目录和文件列表
+    local copy_items=("bin" "src" "tests" "tools" "package.json" "package-lock.json" "README.md" "LICENSE")
+    
+    for item in "${copy_items[@]}"; do
+        if [[ -e "$CCVM_SOURCE_DIR/$item" ]]; then
+            # 如果是目录，先删除旧的再复制新的
+            if [[ -d "$CCVM_SOURCE_DIR/$item" ]]; then
+                rm -rf "$CCVM_DIR/$item" 2>/dev/null || true
+            fi
+            cp -r "$CCVM_SOURCE_DIR/$item" "$CCVM_DIR/" 2>/dev/null || true
+            log INFO "已复制: $item"
+        fi
+    done
+    
+    # 安装 Claude Code 增强配置
+    install_claude_config "$CCVM_SOURCE_DIR/claude-templates"
+    
+    log INFO "安装依赖..."
+    (cd "$CCVM_DIR" && npm install --production --loglevel=error >/dev/null 2>&1) || \
+        (cd "$CCVM_DIR" && npm install --loglevel=error >/dev/null 2>&1) || \
+        log ERROR "依赖安装失败"
+}
+
+install_ccvm() {
+    log INFO "安装 CCVM 核心..."
+    mkdir -p "$CCVM_DIR"
+    
+    if [[ "$INSTALL_MODE" == "dev" ]]; then
+        install_dev_mode
+    else
+        install_prod_mode
+    fi
+    
+    log SUCCESS "CCVM 核心安装完成"
+}
+
+main() {
+    log "INFO" "开始CCVM配置安装..."
+    log "INFO" "安装模式: $INSTALL_MODE"
+    
+    # 1. 安装 CCVM 核心
     install_ccvm
-    create_shell_functions
+    
+    # 2. 安装 CLI 工具
     install_cli_tools
+    
+    # 3. 配置 Shell 函数
+    create_shell_functions
+    
+    # 4. 设置第一个 provider（如果需要）
     setup_first_provider
+    
+    # 5. 显示完成信息
     show_completion
+    
+    log "SUCCESS" "CCVM配置完成！"
 }
 
 # 执行主函数
-if [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
-    main "$@"
-fi
+main "$@"

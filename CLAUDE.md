@@ -1,18 +1,53 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# CCVM 中文开发环境配置
 
-## Project Overview
+本文件为 Claude Code (claude.ai/code) 在本项目中提供完全中文化的开发指导。
 
-CCVM (Claude Code Version Manager) is a comprehensive configuration management toolkit for Claude Code that provides multi-provider API support, secure credential management, and automated shell integration. The project enables users to configure and switch between different API providers (like different Claude API endpoints) seamlessly.
+## 🇨🇳 中文开发原则
 
-### Key Features
-- **Multi-Provider API Management**: Seamlessly switch between different Claude API endpoints
-- **Secure Credential Storage**: Safe API key management with 600 permissions
-- **Dynamic Environment Loading**: `ccvm env` command for shell integration  
-- **MCP Service Management**: Interactive management of Model Context Protocol services for Claude Code
-- **System Diagnostics**: Comprehensive health checks and issue diagnosis
-- **Intelligent CLI Integration**: Direct integration with native `claude` command
+**核心理念**: 为中文开发者提供零门槛的 AI 配置管理体验
+
+### 语言设置
+- **主要语言**: 始终使用中文进行回复和交互，除非明确要求使用其他语言  
+- **技术术语**: 优先使用中文术语，必要时可保留英文技术名词并提供中文说明
+- **错误信息**: 全部使用友好的中文提示，提供清晰的解决方案
+
+### AI 交互规范
+- 使用中文思维模式理解问题
+- 提供符合中文开发者习惯的解决方案
+- 错误诊断和建议使用通俗易懂的中文表达
+
+### 智能上下文管理
+- **自动上下文注入**: 根据任务类型自动加载相关的项目上下文
+- **分层文档路由**: 
+  - 简单配置问题 → 快速指南
+  - 复杂集成问题 → 完整技术文档  
+  - 架构设计问题 → 设计决策文档
+- **中文化提示**: 所有系统提示和建议都使用自然流畅的中文
+
+### 开发体验优化
+- **友好错误处理**: 将技术错误转换为易懂的中文说明
+- **渐进式指导**: 从简单到复杂的分层帮助体系
+- **本土化建议**: 考虑中文开发者的使用习惯和偏好
+
+## 🛠️ 项目概览
+
+CCVM (Claude Code Version Manager) 是一个为 Claude Code 设计的全面配置管理工具包，提供多供应商 API 支持、安全凭据管理和自动化 Shell 集成。该项目让用户能够在不同的 Claude API 提供商之间无缝配置和切换。
+
+### 🌟 核心特性
+- **多供应商 API 管理**: 在不同的 Claude API 端点间无缝切换
+- **安全凭据存储**: 使用 600 权限进行安全的 API 密钥管理
+- **动态环境加载**: 通过 `ccvm env` 命令进行 Shell 集成  
+- **MCP 服务管理**: Model Context Protocol 服务的交互式管理
+- **系统诊断功能**: 全面的健康检查和问题诊断
+- **智能 CLI 集成**: 与原生 `claude` 命令的直接集成
+
+### 🎯 设计理念
+- **零配置**: 开箱即用的智能默认设置
+- **渐进增强**: 从简单使用到高级定制的平滑过渡
+- **安全优先**: API 密钥和敏感配置的安全管理
+- **开发友好**: 符合中国开发者习惯的设计和交互
 
 ### Architecture Philosophy
 CCVM follows a **three-layer architecture** with clear separation of concerns:
