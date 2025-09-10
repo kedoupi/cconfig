@@ -388,6 +388,56 @@ fi
 
 ---
 
+## ADR-012: WeComBot MCP 集成
+
+**状态**: ✅ Accepted  
+**决策日期**: 2025-09-10  
+**决策者**: CCVM Development Team  
+
+### 问题描述
+用户需要通过Claude与企业微信群进行自动化交互，发送各种类型的消息（文本、markdown、图片、新闻卡片等）。
+
+### 决策
+添加 **WeComBot MCP服务** 到CCVM的MCP服务注册表中：
+- 包名：`@kedoupi/wecombot-mcp`
+- 传输方式：stdio (标准MCP协议)
+- 配置要求：企业微信机器人Webhook URL
+- 功能特性：支持多种消息类型（文本、markdown、图片、新闻卡片）
+
+### 决策原因
+- **用户需求**: 企业用户对企业微信自动化有实际需求
+- **技术成熟**: MCP协议标准化，集成简单可靠
+- **扩展价值**: 为CCVM增加企业办公自动化能力
+- **维护成本低**: 使用标准stdio传输，配置简单
+
+### 技术实现
+```javascript
+'wecombot': {
+  name: 'wecombot',
+  displayName: 'WeComBot MCP',
+  description: '向企业微信群发送消息，支持文本、markdown、图片等多种消息类型',
+  package: '@kedoupi/wecombot-mcp',
+  transport: 'stdio',
+  recommended: true,
+  needsConfig: true,
+  configFields: [
+    {
+      name: 'webhook_url',
+      message: '请输入企业微信机器人Webhook URL:',
+      validate: validateWeComWebhookURL
+    }
+  ]
+}
+```
+
+### 后果
+- ✅ 扩展了CCVM的企业办公自动化能力
+- ✅ 为用户提供了企业微信集成解决方案
+- ✅ 遵循了CCVM的MCP服务集成标准
+- ✅ 保持了配置和使用的一致性
+
+---
+
 ## 决策审查计划
 
 ### 定期审查

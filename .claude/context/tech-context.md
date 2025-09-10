@@ -160,6 +160,7 @@ claude "using custom provider"
 - **Context7**: 文档上下文服务
 - **Chrome Browser MCP**: 浏览器自动化和网页交互 (新增)
 - **Figma MCP**: 设计文件和原型数据访问
+- **WeComBot MCP**: 企业微信群消息发送，支持多种消息类型 (新增)
 - **IDE 集成**: VS Code 等开发环境支持
 
 ## 性能和可扩展性

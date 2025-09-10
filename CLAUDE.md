@@ -108,7 +108,7 @@ The system follows a modular architecture with three core managers:
 - **Purpose**: MCP (Model Context Protocol) service management for Claude Code
 - **Key Features**: Interactive MCP service management, configuration, integration
 - **Integration**: Provides `ccvm mcp` command interface
-- **Supported Services**: Filesystem MCP, Sequential Thinking, Docker MCP, Context7, Chrome Browser MCP, Figma MCP
+- **Supported Services**: Filesystem MCP, Sequential Thinking, Docker MCP, Context7, Chrome Browser MCP, Figma MCP, WeComBot MCP
 
 #### Chrome Browser MCP Integration
 CCVM提供了Chrome浏览器自动化的深度集成：

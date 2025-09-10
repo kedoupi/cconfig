@@ -191,6 +191,43 @@ class MCPManager {
           }
         ],
         note: '需要Chrome或Chromium浏览器，stdio方式更稳定可靠'
+      },
+      'wecombot': {
+        name: 'wecombot',
+        displayName: 'WeComBot MCP',
+        description: '向企业微信群发送消息，支持文本、markdown、图片等多种消息类型',
+        package: '@kedoupi/wecombot-mcp',
+        transport: 'stdio',
+        recommended: true,
+        installCommand: 'npm install -g @kedoupi/wecombot-mcp',
+        addCommand: 'claude mcp add --scope user wecombot npx -- -y @kedoupi/wecombot-mcp',
+        scope: 'user',
+        needsConfig: true,
+        requiresEnvVar: true, // 需要环境变量
+        configFields: [
+          {
+            name: 'webhook_url',
+            message: '请输入企业微信机器人Webhook URL:',
+            default: '',
+            envVar: 'WECOM_WEBHOOK_URL', // 对应的环境变量名
+            validate: (value) => {
+              if (!value || value.trim() === '') {
+                return '请输入有效的Webhook URL';
+              }
+              if (!value.startsWith('https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=')) {
+                return '请输入有效的企业微信机器人Webhook URL';
+              }
+              return true;
+            }
+          }
+        ],
+        setupInstructions: [
+          '1. 在企业微信群中添加机器人',
+          '2. 获取机器人Webhook URL',
+          '3. 配置URL作为环境变量WECOM_WEBHOOK_URL',
+          '4. 重启Claude Code以加载新的环境变量'
+        ],
+        note: '支持文本、markdown、图片、新闻卡片等多种消息类型，需要设置WECOM_WEBHOOK_URL环境变量'
       }
     };
   }
@@ -675,6 +712,97 @@ class MCPManager {
       console.log(chalk.red(`❌ 添加失败: ${error.message}`));
     }
   }
+
+  /**
+   * 安装WeComBot MCP服务的特殊处理
+   * 
+   * @param {MCPServiceConfig} mcp - WeComBot MCP服务配置
+   * @returns {Promise<void>}
+   * @private
+   */
+  async installWeComBotMCP(mcp) {
+    console.log(chalk.yellow.bold('\n🔧 WeComBot MCP 需要环境变量配置\n'));
+    
+    // 显示安装说明
+    console.log(chalk.blue('📋 配置步骤：'));
+    for (const instruction of mcp.setupInstructions) {
+      console.log(chalk.gray(`   ${instruction}`));
+    }
+    console.log('');
+    
+    // 步骤1: 安装npm包
+    console.log(chalk.blue('步骤 1/3: 安装npm包...'));
+    try {
+      await this.#execCommand('npm list -g @kedoupi/wecombot-mcp', { silent: true });
+      console.log(chalk.green('✅ @kedoupi/wecombot-mcp 已安装'));
+    } catch {
+      console.log(chalk.yellow('⚠️  @kedoupi/wecombot-mcp 未安装'));
+      
+      const { shouldInstall } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'shouldInstall',
+          message: '是否现在安装 @kedoupi/wecombot-mcp？',
+          default: true
+        }
+      ]);
+      
+      if (shouldInstall) {
+        const spinner = ora('安装 @kedoupi/wecombot-mcp...').start();
+        try {
+          await this.#execCommand(mcp.installCommand, { silent: true });
+          spinner.succeed('@kedoupi/wecombot-mcp 安装成功');
+        } catch (error) {
+          spinner.fail('@kedoupi/wecombot-mcp 安装失败');
+          console.log(chalk.red(`错误: ${error.message}`));
+          return;
+        }
+      } else {
+        console.log(chalk.yellow('请手动安装后再继续：npm install -g @kedoupi/wecombot-mcp'));
+        return;
+      }
+    }
+
+    // 步骤2: 获取Webhook URL
+    console.log(chalk.blue('\n步骤 2/3: 配置企业微信Webhook URL...'));
+    const configField = mcp.configFields[0];
+    const { webhook_url } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'webhook_url',
+        message: configField.message,
+        default: configField.default,
+        validate: configField.validate
+      }
+    ]);
+
+    // 步骤3: 添加到Claude Code
+    console.log(chalk.blue('\n步骤 3/3: 添加到Claude Code...'));
+    const addCommand = `claude mcp add --scope user wecombot --env WECOM_WEBHOOK_URL="${webhook_url}" -- npx -y @kedoupi/wecombot-mcp`;
+    
+    console.log(chalk.gray(`执行: ${addCommand}`));
+    try {
+      const result = await this.#execCommand(addCommand);
+      console.log(chalk.green(`✅ ${mcp.displayName} 已添加到 Claude Code`));
+      if (result.stdout) {
+        console.log(chalk.gray(result.stdout));
+      }
+      
+      // 显示使用说明
+      console.log(chalk.green.bold('\n🎉 WeComBot MCP 配置完成！'));
+      console.log(chalk.yellow('\n💡 使用示例：'));
+      console.log(chalk.gray('  • claude "发送消息到企业微信：项目部署完成"'));
+      console.log(chalk.gray('  • claude "发送markdown格式的状态报告到企业微信"'));
+      console.log(chalk.gray('  • claude "向企业微信群发送图片消息"'));
+      
+      console.log(chalk.blue('\n📝 环境变量说明：'));
+      console.log(chalk.gray(`  • WECOM_WEBHOOK_URL=${webhook_url}`));
+      console.log(chalk.gray('  • 重启Claude Code后生效'));
+      
+    } catch (error) {
+      console.log(chalk.red(`❌ 添加失败: ${error.message}`));
+    }
+  }
   
   /**
    * 测试MCP服务连接
@@ -753,6 +881,11 @@ class MCPManager {
     // 特殊处理Chrome MCP
     if (name === 'chrome-browser' && mcp.requiresManualSetup) {
       return await this.installChromeMCP(mcp);
+    }
+
+    // 特殊处理WeComBot MCP
+    if (name === 'wecombot' && mcp.requiresEnvVar) {
+      return await this.installWeComBotMCP(mcp);
     }
 
     console.log(chalk.blue(`\n📦 配置 ${mcp.displayName} 到用户作用域...`));
