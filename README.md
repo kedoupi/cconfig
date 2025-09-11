@@ -1,418 +1,301 @@
-# CCVM - Claude Code Version Manager
+# CConfig
 
-<div align="center">
+**Claude 配置管理工具（CConfig）** - 专注的 Claude API 配置管理工具
 
-```
-╭─────────────────────────────────────────────────────────────╮
-│                                                             │
-│  ██████  ██████ ██    ██ ███    ███                         │
-│ ██      ██      ██    ██ ████  ████                         │
-│ ██      ██      ██    ██ ██ ████ ██                         │
-│ ██      ██      ██    ██ ██  ██  ██                         │
-│  ██████  ██████  ██████  ██      ██                         │
-│                                                             │
-│                Claude Code Version Manager                  │
-│                                                             │
-╰─────────────────────────────────────────────────────────────╯
-```
+[![npm version](https://badge.fury.io/js/@kedoupi%2Fcconfig.svg)](https://badge.fury.io/js/@kedoupi%2Fcconfig)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![NPM Version](https://img.shields.io/npm/v/@kedoupi/ccvm.svg)](https://npmjs.org/package/@kedoupi/ccvm)
-[![License](https://img.shields.io/npm/l/@kedoupi/ccvm.svg)](https://github.com/kedoupi/ccvm/blob/main/LICENSE)
-[![Node.js Version](https://img.shields.io/node/v/@kedoupi/ccvm.svg)](https://nodejs.org/)
-[![Test Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](https://github.com/kedoupi/ccvm)
-[![CI Status](https://img.shields.io/github/workflow/status/kedoupi/ccvm/CI)](https://github.com/kedoupi/ccvm/actions)
+## 📖 项目简介
 
-**🚀 Claude API Provider Version Manager - Like nvm for Claude**
+CConfig 是一个专为 Claude API 设计的配置管理工具，让开发者能够轻松管理和切换不同的 Claude
+API 配置，就像使用 Git 配置一样简单直观。
 
-*Comprehensive configuration management toolkit for Claude Code with multi-provider API support, secure credential management, and automated shell integration.*
+### 🎯 核心功能
 
-[English](#english-documentation) | [中文](README.zh.md) | [Docs](docs/) | [Examples](docs/examples.md) | [FAQ](docs/faq.md)
+- **🔧 Claude API 配置管理** - 添加、编辑、删除 API 配置
+- **🔄 一键切换配置** - 快速在不同 API 提供商间切换
+- **🔒 安全凭据存储** - API 密钥安全管理（类 Unix 上使用 600 权限）
+- **🚀 Shell 集成** - 与现有工作流无缝集成
 
-</div>
+## 🚀 快速开始
 
----
+### 安装
 
-## English Documentation
-
-### 📖 Project Overview
-
-CCVM (Claude Code Version Manager) is a comprehensive configuration management toolkit for Claude Code that provides multi-provider API support, secure credential management, and automated shell integration. The project enables users to configure and switch between different API providers (like different Claude API endpoints) seamlessly, similar to how nvm manages Node.js versions.
-
-### ✨ Key Features
-
-- 🔧 **Multi-Provider Support** - Easy configuration and switching between multiple Claude API providers
-- 🛡️ **Secure Credential Management** - Safe storage and management of API keys with permission control
-- 🚀 **One-Click Installation** - Automatic environment detection with intelligent setup
-- ⚡ **Smart Claude Integration** - Seamless integration with native Claude command, automatic environment setup
-- 📦 **MCP Service Management** - Install and manage Model Context Protocol services for Claude Code
-- 📊 **Environment Variable Management** - Dynamic environment loading via `ccvm env` command
-- 🩺 **System Diagnostics** - Comprehensive health checks, validation, and issue diagnosis
-- 🎯 **Clean Design** - Reduced command redundancy with unified management interface
-
-### 🚀 Quick Start
-
-#### Installation
-
-CCVM can be installed by running one of the following commands in your terminal:
-
-| Method    | Command                                                                                           |
-| :-------- | :------------------------------------------------------------------------------------------------ |
-| **curl**  | `curl -fsSL https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh \| bash` |
-| **wget**  | `wget -qO- https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh \| bash`   |
-
-> **Note**: The install script will intelligently detect your environment and automatically backup existing configurations.
-
-#### Manual Inspection
-
-You can manually inspect the install script before running:
+一键安装（面向使用者）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kedoupi/ccvm/main/install.sh -o install.sh
-# Inspect the script content
-cat install.sh
-# Run installation
-bash install.sh
+curl -fsSL https://github.com/kedoupi/cconfig/raw/main/install.sh | bash
 ```
 
-#### Development Mode Installation
+- install.sh 会自动：检查 Node 环境、安装 `cconfig`、检测并安装 `claude`
+  CLI、写入 Shell 集成（`claude()` 会先加载 `cconfig env`）。
 
-For contributors and developers:
+手动安装（面向开发者）
 
 ```bash
-git clone https://github.com/kedoupi/ccvm.git
-cd ccvm
-npm install
-# Run install script in project directory, automatically enables dev mode
-./install.sh
+git clone https://github.com/kedoupi/cconfig.git
+cd cconfig
+./setup.sh
 ```
 
-#### Basic Usage
+- setup.sh 会：安装依赖、运行测试、检测并安装 `claude` CLI、把 `cconfig()` 和 `claude()`
+  函数指向本仓库，方便开发调试。
 
-1. **Add API Provider**
+### 基本使用
+
 ```bash
-ccvm add
-# Follow prompts to enter: provider name, API URL, key, etc.
+# 添加 Claude API 配置
+cconfig add anthropic
+
+# 查看所有配置
+cconfig list
+
+# 切换默认配置
+cconfig use anthropic
+
+# 直接使用 Claude
+claude "你好，世界！"
+
+# 输出当前环境变量（加载到 shell 使用）
+eval "$(cconfig env)"
 ```
 
-2. **List All Providers**
+提示：如果尚未设置默认配置，首次添加的 Provider 会自动设为默认。
+
+## 📋 命令参考
+
+### 配置管理
+
 ```bash
-ccvm list
+cconfig add [alias]          # 添加新配置（交互式）
+cconfig list                 # 列出所有配置
+cconfig show <alias>         # 显示配置详情
+cconfig edit <alias>         # 编辑现有配置
+cconfig remove <alias>       # 删除配置
+cconfig use [alias]          # 切换默认配置
 ```
 
-3. **Show Provider Details**
+### 系统状态
+
 ```bash
-ccvm show <alias>
+cconfig status               # 显示系统状态（配置目录、数量、默认项）
+cconfig status --detailed    # 显示每个 provider 的详细信息
 ```
 
-4. **Use Provider**
+### 系统诊断
+
 ```bash
-# Set default provider
-ccvm use <alias>
-
-# Use claude command with CCVM environment
-eval "$(ccvm env)"
-claude "your question"
-
-# Temporary switch to specific provider (without changing default)
-eval "$(ccvm env --provider <provider-alias>)"
-claude "your question"
-
-# Examples:
-eval "$(ccvm env)"; claude "Explain React hooks"                    # Use default provider
-eval "$(ccvm env --provider anthropic)"; claude "Design a REST API"        # Temporarily use anthropic
-eval "$(ccvm env --provider custom-api)"; claude "Translate docs"  # Temporarily use custom-api
+cconfig doctor               # 运行系统诊断并给出建议
+cconfig doctor --fix         # 自动修复常见问题（如无效默认项、权限不安全）
 ```
 
-5. **System Status Check**
+诊断内容与规则说明：
+
+- 默认项有效性
+  - 规则：`config.json` 中的 `defaultProvider` 必须存在对应的 Provider 文件。
+  - 修复：`--fix` 时自动清空无效默认项（不删除任何 Provider 文件）。
+
+- Provider 文件权限（类 Unix）
+  - 规则：`~/.claude/cconfig/providers/*.json` 应为 `600` 权限（仅所有者读/写）。
+  - 修复：`--fix` 时自动执行 `chmod 600`。
+
+- 结构校验（每个 `providers/*.json`）
+  - alias
+    - 规则：必须匹配正则 `^[a-zA-Z0-9_-]{1,64}$`，且内容需与文件名一致（例如 `anthropic.json` 的
+      `alias` 应为 `anthropic`）。
+    - 修复：`--fix` 时若“仅与文件名不一致”，会自动将 `alias`
+      同步为文件名；若格式非法，仅提示修复建议，不自动修改。
+  - URL
+    - 规则：必须为 `http://` 或 `https://` 的有效 URL（推荐公网地址使用 HTTPS，但非强制）。
+    - 修复：不自动修改 URL；请使用 `cconfig edit <alias>` 手动修正。
+  - API Key
+    - 规则：必须为非空字符串。
+    - 修复：不自动生成或修改；请使用 `cconfig edit <alias>` 手动更新。
+
+示例：
+
 ```bash
-ccvm status
-ccvm doctor
+# 仅检查并提示问题
+cconfig doctor
+
+# 自动修复可安全修复的问题（清空无效默认项、权限 600、alias 与文件名不一致）
+cconfig doctor --fix
 ```
 
-6. **Environment Management**
+### 环境变量
+
 ```bash
-# Output environment variables for shell evaluation
-ccvm env
-
-# Use specific provider temporarily
-ccvm env --provider <alias>
-
-# Check current configuration
-ccvm status --detailed
+cconfig env                  # 输出默认配置的环境变量
+cconfig env --provider <alias>  # 输出指定配置的环境变量
+cconfig env --shell fish     # 输出 fish shell 格式
 ```
 
-### 💡 Usage Examples
+### 说明
 
-#### Multi-Provider Configuration
+- 目前已实现的命令：`add`、`list`、`show`、`edit`、`remove`、`use`、`env`、`status`、`doctor`。
+- `mcp` 为规划功能，尚未在此版本中提供。
+
+#### 安全策略
+
+- 建议在公网环境使用 HTTPS 保障安全；本工具不再强制限制 HTTP 使用场景。
+
+## 💡 使用示例
+
+### 添加自定义 API 配置
+
 ```bash
-# Configure Anthropic official API
-ccvm add
-# Provider name: anthropic
-# URL: https://api.anthropic.com
-# Key: your-anthropic-key
-
-# Configure custom API service
-ccvm add  
-# Provider name: custom
-# URL: https://your-custom-api.com
-# Key: your-custom-key
-
-# Set default provider and use
-ccvm use anthropic
-eval "$(ccvm env)"
-claude "Technical consultation"
-
-# Temporary switch to other providers (recommended approach)
-eval "$(ccvm env --provider custom)"
-claude "Question using custom API"
-
-eval "$(ccvm env --provider backup-api)"
-claude "Emergency backup API usage"
+$ cconfig add custom-api
+? API 端点 URL: https://api.custom.com
+? API Key: sk-custom-key-123456789
+✓ 配置 'custom-api' 添加成功！
 ```
 
-#### Temporary Provider Switching (Advanced Usage)
+### 查看和切换配置
+
 ```bash
-# Temporary switching without modifying default config (recommended)
-eval "$(ccvm env --provider backup-api)"
-claude "Handle emergency with backup API"
+$ cconfig list
+┌─────────────┬──────────────────────────┬─────────┬─────────────┐
+│    别名     │           URL            │  状态   │  最后使用   │
+├─────────────┼──────────────────────────┼─────────┼─────────────┤
+│ anthropic   │ https://api.anthropic.com│ 默认    │ 2小时前     │
+│ custom-api  │ https://api.custom.com   │ 可用    │ 从未使用    │
+└─────────────┴──────────────────────────┴─────────┴─────────────┘
 
-eval "$(ccvm env --provider test-env)" 
-claude "Verify features in test environment"
-
-# Quick multi-provider workflows
-eval "$(ccvm env --provider fast-api)"
-claude "Rapid prototyping questions"      # Use fast API
-
-eval "$(ccvm env --provider quality-api)"
-claude "Production-grade code review"     # Switch to high-quality API
-
-eval "$(ccvm env --provider cost-api)"
-claude "Large data processing tasks"      # Switch to economical API
-
-# Error recovery scenarios
-eval "$(ccvm env)"
-claude "Main task"                        # Default API
-
-eval "$(ccvm env --provider backup-api)"
-claude "Main task"                        # Quick switch to backup API
+$ cconfig use custom-api
+✓ 默认配置已切换到 'custom-api'
 ```
 
-#### Team Collaboration Setup
+### Shell 集成
+
 ```bash
-# View current configuration
-ccvm status --detailed
+# 加载配置到当前 shell
+eval "$(cconfig env)"
 
-# Switch default provider
-ccvm use anthropic
+# 使用特定配置
+eval "$(cconfig env --provider custom-api)"
+claude "使用自定义 API"
 
-# Check system health
-ccvm doctor --fix
+# 支持不同 shell 格式
+eval "$(cconfig env --shell fish)"  # Fish shell
+eval "$(cconfig env --shell zsh)"   # Zsh shell
 ```
 
-#### MCP Service Management
+## 🏗️ 配置文件结构
+
+CConfig 将配置存储在 `~/.claude/cconfig/` 目录：
+
+```
+~/.claude/cconfig/
+├── config.json              # 系统配置
+└── providers/               # API 提供商配置
+    ├── anthropic.json       # Anthropic 配置
+    └── custom-api.json      # 自定义配置
+```
+
+### 配置文件格式（示例）
+
+```json
+{
+  "alias": "anthropic",
+  "name": "Anthropic Claude API",
+  "apiUrl": "https://api.anthropic.com",
+  "apiKey": "sk-...",
+  "timeout": 30000,
+  "createdAt": "2025-09-11T...",
+  "lastUsed": "2025-09-11T..."
+}
+```
+
+## 🛠️ 开发
+
+### 本地开发
+
 ```bash
-# Interactive MCP management for Claude Code
-ccvm mcp
-# Select "📋 查看推荐 MCP 服务" to view available services
-# Select "➕ 安装 MCP 服务到 Claude Code" to install
-# Select "🔧 检查环境配置" to diagnose issues
+# 克隆项目
+git clone https://github.com/kedoupi/cconfig.git
+cd cconfig
 
-# Recommended MCP services:
-# - Filesystem MCP: Local file access
-# - Sequential Thinking: Structured reasoning
-# - Memory Bank: Persistent memory storage
-# - Docker MCP: Container management
-
-# View installed services (Claude Code native command)
-claude mcp list
-```
-
-### 🏗️ System Architecture
-
-```
-CCVM (Claude Code Version Manager)
-├── ConfigManager      # System configuration management
-├── ProviderManager    # API provider management  
-├── MCPManager         # MCP service management
-└── Utils/             # Utility modules (banner, logger, validation, etc.)
-```
-
-### ⚡ Technical Implementation
-
-**Dynamic Environment Loading**
-```bash
-# CCVM provides dynamic environment variable loading:
-
-# Method 1: Direct evaluation (recommended)
-eval "$(ccvm env)"
-claude "your question"
-
-# Method 2: Provider-specific temporary usage
-eval "$(ccvm env --provider custom-api)"
-claude "question for custom API"
-
-# Method 3: Shell-specific format
-eval "$(ccvm env --shell fish)"  # For fish shell users
-```
-
-**Workflow**
-1. 📡 `ccvm env` outputs shell-compatible environment variable exports
-2. 🔧 `eval` command loads these variables into current shell session
-3. 🚀 Native `claude` command automatically uses loaded environment variables
-4. ✅ Completely transparent experience, no configuration files needed
-
-**Configuration File Structure**
-```
-~/.claude/ccvm/
-├── config.json        # System configuration
-├── providers/         # Provider configurations
-│   ├── anthropic.json # Individual provider configs
-│   └── custom.json    # (with 600 permissions)
-```
-
-### 📚 CLI Commands Reference
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `ccvm add` | Add new provider (interactive) | `ccvm add` |
-| `ccvm list` | List all providers | `ccvm list` |
-| `ccvm show <alias>` | Show provider details | `ccvm show anthropic` |
-| `ccvm edit <alias>` | Edit provider configuration | `ccvm edit custom` |
-| `ccvm remove <alias>` | Remove provider | `ccvm remove old-provider` |
-| `ccvm use [alias]` | Set/select default provider | `ccvm use anthropic` |
-| `ccvm env [--shell <shell>]` | Output environment variables | `ccvm env --shell bash` |
-| `ccvm env [--provider <alias>]` | Output variables for specific provider | `ccvm env --provider custom` |
-| `ccvm status [--detailed]` | Show system status | `ccvm status --detailed` |
-| `ccvm doctor [--fix]` | Run system diagnostics | `ccvm doctor --fix` |
-| `ccvm mcp` | Manage MCP services for Claude Code | `ccvm mcp` |
-
-### 🛠️ Development
-
-#### Requirements
-- Node.js >= 18.0.0
-- npm >= 8.0.0
-- jq (JSON processing tool)
-
-#### Development Commands
-```bash
-# Install dependencies
+# 安装依赖
 npm install
 
-# Run tests
+# 运行测试
 npm test
-npm run test:coverage
-npm run test:integration
 
-# Code quality
-npm run lint
-npm run lint:fix
-npm run format
-
-# Pre-pack checks
-npm run prepack
+# 本地测试
+npm install -g .
+cconfig --help
 ```
 
-#### Project Structure
-```
-ccvm/
-├── src/                # Source code
-│   ├── core/          # Core managers
-│   │   ├── ConfigManager.js
-│   │   ├── ProviderManager.js
-│   │   └── MCPManager.js
-│   └── utils/         # Utility functions
-│       ├── banner.js  # ASCII art and banners
-│       ├── errorHandler.js
-│       ├── logger.js
-│       ├── Validator.js
-│       └── FileUtils.js
-├── bin/               # CLI entry point
-├── tests/             # Test files
-│   ├── unit/          # Unit tests
-│   ├── integration/   # Integration tests
-│   └── helpers/       # Test utilities
-├── tools/             # Development tools
-├── docs/              # Documentation
-└── install.sh         # Installation script
-```
+### CI 发布（GitHub Actions）
 
-### 🔒 Security Features
+- 已内置 npm 自动发布：推送形如 `v1.0.0` 的 Git 标签即触发。
+- 仓库需要配置 `NPM_TOKEN` 机密（npm automation token，具发布权限，免 2FA）。
+- 操作步骤：
+  - 在 npm 创建 automation token，并添加到 GitHub 仓库 Settings → Secrets → Actions → `NPM_TOKEN`
+  - 确保 `package.json` 的 `version` 与标签一致
+  - 打标签并推送：
 
-- **Permission Control** - API key files stored with 600 permissions
-- **Security Validation** - HTTPS enforcement (except localhost/private networks)
-- **Backup Encryption** - Auto-backups include integrity verification
-- **Environment Isolation** - Dynamic configuration loading to avoid env pollution
-- **Input Sanitization** - Comprehensive validation and sanitization of user inputs
-
-### 🧪 Testing
-
-The project maintains high test coverage with comprehensive testing strategies:
-
-- **Unit Tests** - Individual component testing with Jest
-- **Integration Tests** - Full CLI command testing
-- **Coverage Reports** - Minimum 70% coverage across all metrics
-- **Test Utilities** - Shared fixtures and test helpers
-
-Run tests:
 ```bash
-npm test                    # Run all unit tests
-npm run test:coverage      # Run with coverage report
-npm run test:integration   # Run integration tests
-npm run test:watch         # Watch mode for development
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-### 🤝 Contributing
+工作流文件：`.github/workflows/release.yml`
 
-We welcome all forms of contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+### 脚本命令
 
-1. **Fork** the project repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Create** a Pull Request
+```bash
+npm run test              # 运行测试
+npm run test:coverage     # 测试覆盖率
+npm run lint             # 代码检查
+npm run lint:fix         # 自动修复
+npm run format           # 代码格式化
+```
 
-#### Development Standards
-- Follow ESLint and Prettier code standards
-- Write unit tests for new features
-- Update relevant documentation
-- Keep commit messages clear and descriptive
+## 📊 系统要求
 
-### 📊 Project Stats
+- **Node.js**: >=18.0.0
+- **操作系统**: macOS, Linux, Windows
+- **权限**: 读写 `~/.claude/` 目录
 
-- **Test Coverage**: 94%+
-- **Core Modules**: 5 managers + utilities
-- **Documentation**: Complete user and developer guides
-- **Security**: Comprehensive validation and protection
-- **Performance**: Optimized for CLI usage patterns
+## 🤝 贡献
 
-### 🌟 Community
+欢迎贡献代码！请参考以下步骤：
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/kedoupi/ccvm/issues)
-- **Discussions**: [Join community discussions](https://github.com/kedoupi/ccvm/discussions)
-- **Documentation**: [Comprehensive guides and examples](docs/)
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 创建 Pull Request
 
-### 🎯 Roadmap
+### 开发指南
 
-- [ ] **Plugin System** - Extensible architecture for custom providers
-- [ ] **Configuration Sync** - Cloud synchronization for team environments
-- [ ] **Advanced Logging** - Enhanced debugging and monitoring capabilities
-- [ ] **GUI Interface** - Optional graphical interface for configuration management
-- [ ] **Docker Integration** - Container-based deployment options
+- 遵循现有代码风格
+- 编写测试用例
+- 更新相关文档
+- 确保所有测试通过
 
-### 📄 License
+## 📝 更新日志
 
-This project is licensed under the [MIT License](LICENSE).
+### v1.0.0
 
-### 🙏 Acknowledgments
+- 初始公开发布（npm 包：`@kedoupi/cconfig`）
+- 放宽 URL 校验：不再强制非本地/内网地址必须使用 HTTPS（仍要求 http/https 协议，推荐公网使用 HTTPS）
+- 首个 Provider 自动设为默认：首次添加配置时自动写入 `defaultProvider` 并记录 `lastUsed`
+- API Key 输入改为“掩码显示”（inquirer `mask: '*'`），避免完全不回显带来的困扰
+- 安装脚本全中文化，并在“未配置 Provider”时提示执行 `cconfig add`
+- 文档与提示统一中文，修正过时示例（去除无效的 dev-setup.sh 提示）
 
-Thanks to all developers and community members who contributed to this project!
+## 📄 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。
+
+## 🔗 相关链接
+
+- [GitHub 仓库](https://github.com/kedoupi/cconfig)
+- [npm 包](https://www.npmjs.com/package/@kedoupi/cconfig)
+- [问题反馈](https://github.com/kedoupi/cconfig/issues)
 
 ---
 
-<div align="center">
-
-**Made with ❤️ by the Claude Code Kit community**
-
-[⭐ Star us on GitHub](https://github.com/kedoupi/ccvm) | [🐛 Report Issues](https://github.com/kedoupi/ccvm/issues) | [📖 Read Docs](docs/)
-
-</div>
+**CConfig** - 让 Claude API 配置管理变得简单 ✨

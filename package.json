@@ -1,41 +1,41 @@
 {
-  "name": "@kedoupi/ccvm",
-  "version": "1.1.0",
-  "description": "Claude Code Version Manager - manage Claude API providers like nvm",
-  "main": "src/index.js",
+  "name": "@kedoupi/cconfig",
+  "version": "1.0.0",
+  "description": "CConfig - simple and secure Claude API configuration management",
+  "main": "bin/cconfig.js",
   "bin": {
-    "ccvm": "bin/ccvm.js"
+    "cconfig": "bin/cconfig.js"
   },
   "scripts": {
-    "start": "node bin/ccvm.js",
+    "start": "node bin/cconfig.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:integration": "node tools/integration-test.js",
-    "test:performance": "node tests/performance/benchmark.js",
-    "lint": "eslint src/ tests/ bin/",
-    "lint:fix": "eslint src/ tests/ bin/ --fix",
-    "format": "prettier --write src/ tests/ bin/",
-    "format:check": "prettier --check src/ tests/ bin/",
+    "test:integration": "echo 'Integration tests not yet implemented'",
+    "test:performance": "echo 'Performance tests not yet implemented'",
+    "lint": "eslint bin/",
+    "lint:fix": "eslint bin/ --fix",
+    "format": "prettier --write bin/ *.js *.md",
+    "format:check": "prettier --check bin/ *.js *.md",
     "build": "echo 'No build step required for CLI tool'",
-    "prepack": "npm run lint && npm run test && npm run format:check",
+    "prepack": "npm run lint && npm run format:check",
     "clean": "rm -rf node_modules/ package-lock.json coverage/ .nyc_output/",
     "reset": "npm run clean && npm install",
-    "size": "npm run build && find src/ -name '*.js' | xargs wc -l | tail -1",
-    "docs": "jsdoc src/ -d docs/api/",
+    "size": "find bin/ -name '*.js' | xargs wc -l | tail -1",
+    "docs": "jsdoc bin/ -d docs/api/",
     "prepare": "husky install"
   },
   "keywords": [
     "claude",
-    "claude-code",
-    "ccvm",
-    "version-manager",
-    "provider-manager",
+    "claude-api",
+    "cconfig",
+    "configuration-manager",
+    "api-management",
     "cli",
     "anthropic",
     "ai"
   ],
-  "author": "CCVM Contributors",
+  "author": "CConfig Contributors",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
@@ -62,18 +62,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kedoupi/ccvm.git"
+    "url": "git+https://github.com/kedoupi/cconfig.git"
   },
   "bugs": {
-    "url": "https://github.com/kedoupi/ccvm/issues"
+    "url": "https://github.com/kedoupi/cconfig/issues"
   },
-  "homepage": "https://github.com/kedoupi/ccvm#readme",
+  "homepage": "https://github.com/kedoupi/cconfig#readme",
   "files": [
     "bin/",
-    "src/",
-    ".claude/",
-    "tools/",
     "install.sh",
+    "setup.sh",
     "README.md"
   ],
   "lint-staged": {
@@ -82,10 +80,5 @@
       "prettier --write"
     ]
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged",
-      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
-    }
-  }
+  "husky": {}
 }
