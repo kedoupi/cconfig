@@ -20,6 +20,7 @@ logs/
 ### Caches
 .cache/
 .parcel-cache/
+.npm-cache/
 
 ### Framework outputs
 .next/
