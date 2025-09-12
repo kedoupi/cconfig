@@ -1,4 +1,4 @@
-# Dependencies
+### Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -6,111 +6,47 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
+### Build/Output
+dist/
+build/
 coverage/
+.nyc_output
 *.lcov
 
-# nyc test coverage
-.nyc_output
+### Logs
+logs/
+*.log
 
-# Grunt intermediate storage
-.grunt
+### Caches
+.cache/
+.parcel-cache/
 
-# Bower dependency directory
-bower_components
+### Framework outputs
+.next/
+.nuxt/
+.vuepress/dist/
+build/Release/
 
-# node-waf configuration
-.lock-wscript
-
-# Compiled binary addons
-build/Release
-
-# Dependency directories
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env
-.env.test
-.env.local
-.env.production
-
-# parcel-bundler cache
-.cache
-.parcel-cache
-
-# next.js build output
-.next
-
-# nuxt.js build output
-.nuxt
-
-# vuepress build output
-.vuepress/dist
-
-# Serverless directories
-.serverless
-
-# FuseBox cache
-.fusebox/
-
-# DynamoDB Local files
-.dynamodb/
-
-# TernJS port file
-.tern-port
-
-# IDE files
+### IDE/OS
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS generated files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Logs
-logs
-*.log
-
-# Test artifacts
+### Test artifacts
 test-results/
 *.test.json
 phase*-test-report.json
 test-installation-report.json
 
-# Temporary files
+### Temporary files
 tmp/
 temp/
 .tmp/
 
-# Local configuration files (should not be committed)
+### Local configuration (not committed)
 local-config.json
 test-config.json
