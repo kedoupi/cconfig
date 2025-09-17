@@ -83,19 +83,95 @@ detect_shell_config() {
     esac
 }
 
+# 安装 Shell 集成文件
+install_shell_integration_file() {
+    local config_dir="$HOME/.claude/cconfig"
+    local integration_file="$config_dir/cconfig.sh"
+    local script_dir
+
+    # 创建配置目录
+    mkdir -p "$config_dir"
+
+    # 确定集成文件源路径
+    if detect_dev_mode; then
+        script_dir="$(cd "$(dirname "$0")" && pwd)"
+        cp "${script_dir}/cconfig.sh" "$integration_file"
+        # 记录开发安装路径
+        echo "$script_dir" > "$config_dir/.dev_install"
+    else
+        # 从npm包中复制文件（这里需要确保npm包包含cconfig.sh）
+        local npm_dir
+        npm_dir=$(npm root -g 2>/dev/null)/\@kedoupi/cconfig
+        if [[ -f "$npm_dir/cconfig.sh" ]]; then
+            cp "$npm_dir/cconfig.sh" "$integration_file"
+        else
+            # 如果npm包中没有，则内联创建
+            cat > "$integration_file" << 'SHELL_INTEGRATION_EOF'
+#!/bin/bash
+# CConfig Shell Integration
+
+# Enhanced Claude command with provider switching
+claude() {
+    local provider=""
+    local args=()
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -P|--provider)
+                provider="$2"
+                shift 2
+                ;;
+            --pp)
+                args+=("--dangerously-skip-permissions")
+                shift
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Load environment variables
+    if [[ -n "$provider" ]]; then
+        eval "$(cconfig env --provider "$provider" 2>/dev/null)" || {
+            echo "❌ 加载 Provider '$provider' 失败"
+            echo "💡 运行：cconfig list"
+            return 1
+        }
+    else
+        eval "$(cconfig env 2>/dev/null)" || {
+            echo "❌ 尚未配置默认 Provider"
+            echo "💡 运行：cconfig add"
+            return 1
+        }
+    fi
+
+    # Execute claude with arguments
+    command claude "${args[@]}"
+}
+SHELL_INTEGRATION_EOF
+        fi
+    fi
+
+    log SUCCESS "Shell 集成文件已安装到：$integration_file"
+}
+
 # 配置 Shell 集成
 setup_shell_integration() {
     local shell_config
+    local integration_file="$HOME/.claude/cconfig/cconfig.sh"
     shell_config="$(detect_shell_config)"
-    
+
     # 验证 shell 配置文件路径安全性
     if [[ ! "$shell_config" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
         log ERROR "检测到无效的 Shell 配置文件路径"
         return 1
     fi
-    
+
     log INFO "正在配置 Shell 集成：$(basename "$shell_config")"
-    
+
     # 安全地检查和移除旧配置
     if [[ -f "$shell_config" ]] && grep -q "# CConfig Integration" "$shell_config" 2>/dev/null; then
         WAS_INTEGRATED_BEFORE=1
@@ -105,51 +181,12 @@ setup_shell_integration() {
             sed -i.bak '/# CConfig Integration/,/# End CConfig Integration/d' "$shell_config"
         fi
     fi
-    
-    # 写入新的集成函数
+
+    # 写入简化的集成配置
     cat >> "$shell_config" << EOF
 
 # CConfig Integration
-claude() {
-    local provider=""
-    local args=()
-    
-    # 解析参数
-    while [[ \$# -gt 0 ]]; do
-        case \$1 in
-            -P|--provider)
-                provider="\$2"
-                shift 2
-                ;;
-            --pp)
-                args+=("--dangerously-skip-permissions")
-                shift
-                ;;
-            *)
-                args+=("\$1")
-                shift
-                ;;
-        esac
-    done
-    
-    # 加载环境变量
-    if [[ -n "\$provider" ]]; then
-        eval "\$($CCONFIG_CMD env --provider "\$provider" 2>/dev/null)" || {
-            echo "❌ 加载 Provider '\$provider' 失败"
-            echo "💡 运行：$CCONFIG_CMD list"
-            return 1
-        }
-    else
-        eval "\$($CCONFIG_CMD env 2>/dev/null)" || {
-            echo "❌ 尚未配置默认 Provider"
-            echo "💡 运行：$CCONFIG_CMD add"
-            return 1
-        }
-    fi
-    
-    # 执行 claude 命令
-    command claude "\${args[@]}"
-}
+[[ -f "$integration_file" ]] && source "$integration_file"
 # End CConfig Integration
 EOF
 
@@ -187,7 +224,8 @@ main() {
     else
         log SUCCESS "已安装 Claude CLI"
     fi
-    
+
+    install_shell_integration_file
     setup_shell_integration
     check_and_prompt_initial_config
     

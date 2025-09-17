@@ -1,6 +1,6 @@
 {
   "name": "@kedoupi/cconfig",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CConfig - simple and secure Claude API configuration management",
   "main": "bin/cconfig.js",
   "bin": {
@@ -72,6 +72,7 @@
     "bin/",
     "install.sh",
     "setup.sh",
+    "cconfig.sh",
     "README.md"
   ],
   "lint-staged": {
