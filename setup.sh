@@ -102,21 +102,38 @@ detect_shell_config() {
     esac
 }
 
+# Install shell integration file for development
+install_dev_shell_integration() {
+    local config_dir="$HOME/.claude/cconfig"
+    local integration_file="$config_dir/cconfig.sh"
+    local project_dir="$(pwd)"
+
+    # Create config directory
+    mkdir -p "$config_dir"
+
+    # Copy shell integration file
+    cp "./cconfig.sh" "$integration_file"
+
+    # Record development installation path
+    echo "$project_dir" > "$config_dir/.dev_install"
+
+    log SUCCESS "开发环境Shell集成文件已安装"
+}
+
 # Setup shell integration
 setup_shell_integration() {
     local shell_config
-    local project_dir
+    local integration_file="$HOME/.claude/cconfig/cconfig.sh"
     shell_config="$(detect_shell_config)"
-    project_dir="$(pwd)"
-    
+
     # 验证路径安全性
     if [[ ! "$shell_config" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
         log ERROR "Invalid shell config path detected"
         return 1
     fi
-    
+
     log INFO "正在配置 Shell 集成到 $(basename "$shell_config")"
-    
+
     # Remove old configuration
     if [[ -f "$shell_config" ]] && grep -q "# CConfig Integration" "$shell_config" 2>/dev/null; then
         WAS_INTEGRATED_BEFORE=1
@@ -127,56 +144,12 @@ setup_shell_integration() {
         fi
         log INFO "已移除旧的集成配置"
     fi
-    
-    # Add new configuration
+
+    # Add new simplified configuration
     cat >> "$shell_config" << EOF
 
 # CConfig Integration
-# Development/repository installation
-cconfig() {
-    node "$project_dir/bin/cconfig.js" "\$@"
-}
-
-claude() {
-    local provider=""
-    local args=()
-    
-    # Parse arguments
-    while [[ \$# -gt 0 ]]; do
-        case \$1 in
-            -P|--provider)
-                provider="\$2"
-                shift 2
-                ;;
-            --pp)
-                args+=("--dangerously-skip-permissions")
-                shift
-                ;;
-            *)
-                args+=("\$1")
-                shift
-                ;;
-        esac
-    done
-    
-    # Load environment variables
-    if [[ -n "\$provider" ]]; then
-        eval "\$(node "$project_dir/bin/cconfig.js" env --provider "\$provider" 2>/dev/null)" || {
-            echo "❌ Failed to load provider '\$provider'"
-            echo "💡 Run: cconfig list"
-            return 1
-        }
-    else
-        eval "\$(node "$project_dir/bin/cconfig.js" env 2>/dev/null)" || {
-            echo "❌ No default provider configured"
-            echo "💡 Run: cconfig add"
-            return 1
-        }
-    fi
-    
-    # Execute claude with arguments
-    command claude "\${args[@]}"
-}
+[[ -f "$integration_file" ]] && source "$integration_file"
 # End CConfig Integration
 EOF
 
@@ -223,6 +196,7 @@ main() {
     check_dependencies
     install_dependencies
     install_cli_tools
+    install_dev_shell_integration
     setup_shell_integration
     check_and_prompt_initial_config
     run_tests
