@@ -3,34 +3,49 @@
 # This file provides shell integration functions for CConfig
 # It should be sourced from the user's shell configuration file
 
-# Detect if we're in development mode
-__cconfig_detect_cmd() {
-    # Check if we have a development installation marker
-    if [[ -f "$HOME/.claude/cconfig/.dev_install" ]]; then
+# Detect if we're in development mode and return repo path when available
+__cconfig_dev_path() {
+    local marker="$HOME/.claude/cconfig/.dev_install"
+    if [[ -f "$marker" ]]; then
         local dev_path
-        dev_path=$(cat "$HOME/.claude/cconfig/.dev_install")
-        if [[ -f "$dev_path/bin/cconfig.js" ]]; then
-            echo "node \"$dev_path/bin/cconfig.js\""
-            return
+        dev_path=$(<"$marker")
+        if [[ -n "$dev_path" && -f "$dev_path/bin/cconfig.js" ]]; then
+            printf '%s' "$dev_path"
+            return 0
         fi
     fi
-
-    # Fall back to global installation
-    echo "cconfig"
+    return 1
 }
 
-# CConfig command wrapper (for development mode)
+# Execute the appropriate CConfig CLI (development repo or global install)
+__cconfig_exec() {
+    local dev_path
+    if dev_path=$(__cconfig_dev_path); then
+        node "$dev_path/bin/cconfig.js" "$@"
+        return $?
+    fi
+
+    local cli_path
+    cli_path=$(type -P cconfig 2>/dev/null)
+    if [[ -n "$cli_path" ]]; then
+        "$cli_path" "$@"
+        return $?
+    fi
+
+    echo "cconfig CLI 未找到，请确认已经安装" >&2
+    return 1
+}
+
+# CConfig command wrapper
 cconfig() {
-    local cmd
-    cmd=$(__cconfig_detect_cmd)
-    eval "$cmd \"\$@\""
+    __cconfig_exec "$@"
 }
 
 # Enhanced Claude command with provider switching
 claude() {
     local provider=""
     local args=()
-    local cmd
+    local env_output
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -50,23 +65,22 @@ claude() {
         esac
     done
 
-    # Get the cconfig command
-    cmd=$(__cconfig_detect_cmd)
-
     # Load environment variables
     if [[ -n "$provider" ]]; then
-        eval "$($cmd env --provider "$provider" 2>/dev/null)" || {
+        if ! env_output=$(__cconfig_exec env --provider "$provider" 2>/dev/null); then
             echo "❌ 加载 Provider '$provider' 失败"
             echo "💡 运行：cconfig list"
             return 1
-        }
+        fi
     else
-        eval "$($cmd env 2>/dev/null)" || {
+        if ! env_output=$(__cconfig_exec env 2>/dev/null); then
             echo "❌ 尚未配置默认 Provider"
             echo "💡 运行：cconfig add"
             return 1
-        }
+        fi
     fi
+
+    eval "$env_output"
 
     # Execute claude with arguments
     command claude "${args[@]}"
