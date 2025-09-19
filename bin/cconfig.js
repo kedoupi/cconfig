@@ -13,6 +13,14 @@ const path = require('path');
 const os = require('os');
 const Table = require('cli-table3');
 
+// Disable chalk colors when stdout is not a TTY unless explicitly overridden
+if (
+  !process.stdout.isTTY &&
+  process.env.CCONFIG_ALLOW_COLOR_IN_PIPES !== '1'
+) {
+  chalk.level = 0;
+}
+
 // Import package.json for version
 const packageJson = require('../package.json');
 
