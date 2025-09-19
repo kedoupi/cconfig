@@ -51,3 +51,4 @@ temp/
 ### Local configuration (not committed)
 local-config.json
 test-config.json
+.cconfig_dev_install
