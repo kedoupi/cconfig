@@ -149,7 +149,7 @@ async function listProviders() {
     const url = String(provider.apiUrl || '');
     const maxUrlLen = urlWidth - 2; // keep within cell
     const urlCell =
-      url.length > maxUrlLen ? truncateMiddle(url, maxUrlLen) : url;
+      url.length > maxUrlLen ? config.truncateMiddle(url, maxUrlLen) : url;
     table.push([
       provider.alias,
       urlCell,
