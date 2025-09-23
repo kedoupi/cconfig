@@ -17,10 +17,7 @@ const config = require('../lib/config');
 const providers = require('../lib/providers');
 
 // Disable chalk colors when stdout is not a TTY unless explicitly overridden
-if (
-  !process.stdout.isTTY &&
-  process.env.CCONFIG_ALLOW_COLOR_IN_PIPES !== '1'
-) {
+if (!process.stdout.isTTY && process.env.CCONFIG_ALLOW_COLOR_IN_PIPES !== '1') {
   chalk.level = 0;
 }
 
@@ -77,7 +74,11 @@ async function addProvider() {
   ]);
 
   try {
-    await providers.createProvider(answers.alias, answers.apiUrl, answers.apiKey);
+    await providers.createProvider(
+      answers.alias,
+      answers.apiUrl,
+      answers.apiKey
+    );
 
     // If no default provider yet, set this as default
     const defaultProvider = await providers.getDefaultProvider();
@@ -403,7 +404,9 @@ async function statusCommand(options = {}) {
     console.log('\n详细信息:');
     for (const file of jsonFiles) {
       try {
-        const provider = await fs.readJson(path.join(config.PROVIDERS_DIR, file));
+        const provider = await fs.readJson(
+          path.join(config.PROVIDERS_DIR, file)
+        );
         const last = provider.lastUsed
           ? config.formatRelativeTime(provider.lastUsed)
           : '-';
