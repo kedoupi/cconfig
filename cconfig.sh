@@ -5,7 +5,7 @@
 
 # Detect if we're in development mode and return repo path when available
 __cconfig_dev_path() {
-    local marker="$HOME/.claude/cconfig/.dev_install"
+    local marker="$HOME/.cconfig/.dev_install"
     if [[ -f "$marker" ]]; then
         local dev_path
         dev_path=$(<"$marker")

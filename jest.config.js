@@ -16,6 +16,7 @@ module.exports = {
   collectCoverage: false, // Enable with --coverage flag
   collectCoverageFrom: [
     'bin/**/*.js',
+    'lib/**/*.js',
     '!**/node_modules/**',
     '!**/tests/**',
     '!**/coverage/**',

@@ -96,7 +96,7 @@ cconfig doctor --fix         # 自动修复常见问题（如无效默认项、�
   - 修复：`--fix` 时自动清空无效默认项（不删除任何 Provider 文件）。
 
 - Provider 文件权限（类 Unix）
-  - 规则：`~/.claude/cconfig/providers/*.json` 应为 `600` 权限（仅所有者读/写）。
+  - 规则：`~/.cconfig/providers/*.json` 应为 `600` 权限（仅所有者读/写）。
   - 修复：`--fix` 时自动执行 `chmod 600`。
 
 - 结构校验（每个 `providers/*.json`）
@@ -182,15 +182,23 @@ eval "$(cconfig env --shell zsh)"   # Zsh shell
 
 ## 🏗️ 配置文件结构
 
-CConfig 将配置存储在 `~/.claude/cconfig/` 目录：
+CConfig 将配置存储在 `~/.cconfig/` 目录：
 
 ```
-~/.claude/cconfig/
+~/.cconfig/
 ├── config.json              # 系统配置
 └── providers/               # API 提供商配置
     ├── anthropic.json       # Anthropic 配置
     └── custom-api.json      # 自定义配置
 ```
+
+### 🔄 从旧版本迁移
+
+如果您之前使用的是旧版本（配置在 `~/.claude/cconfig/`），CConfig 会在首次运行时自动迁移您的配置到新位置 `~/.cconfig/`。迁移过程：
+
+1. **自动检测**：检查旧配置目录是否存在
+2. **安全迁移**：将所有配置文件复制到新位置
+3. **保留备份**：旧配置目录保留，您可以手动删除
 
 ### 配置文件格式（示例）
 
@@ -256,7 +264,7 @@ npm run format           # 代码格式化
 
 - **Node.js**: >=18.0.0
 - **操作系统**: macOS, Linux, Windows
-- **权限**: 读写 `~/.claude/` 目录
+- **权限**: 读写 `~/.cconfig/` 目录
 
 ## 🤝 贡献
 

@@ -104,7 +104,7 @@ detect_shell_config() {
 
 # Install shell integration file for development
 install_dev_shell_integration() {
-    local config_dir="$HOME/.claude/cconfig"
+    local config_dir="$HOME/.cconfig"
     local integration_file="$config_dir/cconfig.sh"
     local project_dir="$(pwd)"
 
@@ -123,7 +123,7 @@ install_dev_shell_integration() {
 # Setup shell integration
 setup_shell_integration() {
     local shell_config
-    local integration_file="$HOME/.claude/cconfig/cconfig.sh"
+    local integration_file="$HOME/.cconfig/cconfig.sh"
     shell_config="$(detect_shell_config)"
 
     # 验证路径安全性
@@ -158,7 +158,7 @@ EOF
 
 # Prompt on first setup if no provider configured yet
 check_and_prompt_initial_config() {
-    local config_dir="$HOME/.claude/cconfig"
+    local config_dir="$HOME/.cconfig"
     local providers_dir="$config_dir/providers"
     # 在开发环境下，只要未配置任何 Provider，就提示一次
     if [[ ! -d "$providers_dir" ]] || ! ls -1 "$providers_dir"/*.json >/dev/null 2>&1; then

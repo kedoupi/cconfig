@@ -85,7 +85,7 @@ detect_shell_config() {
 
 # 安装 Shell 集成文件
 install_shell_integration_file() {
-    local config_dir="$HOME/.claude/cconfig"
+    local config_dir="$HOME/.cconfig"
     local integration_file="$config_dir/cconfig.sh"
     local script_dir
 
@@ -161,7 +161,7 @@ SHELL_INTEGRATION_EOF
 # 配置 Shell 集成
 setup_shell_integration() {
     local shell_config
-    local integration_file="$HOME/.claude/cconfig/cconfig.sh"
+    local integration_file="$HOME/.cconfig/cconfig.sh"
     shell_config="$(detect_shell_config)"
 
     # 验证 shell 配置文件路径安全性
@@ -195,7 +195,7 @@ EOF
 
 # 如未配置 Provider，则提示用户进行配置
 check_and_prompt_initial_config() {
-    local config_dir="$HOME/.claude/cconfig"
+    local config_dir="$HOME/.cconfig"
     local providers_dir="$config_dir/providers"
     # Always prompt when no provider configured (first or subsequent installs)
     if [[ ! -d "$providers_dir" ]] || ! ls -1 "$providers_dir"/*.json >/dev/null 2>&1; then

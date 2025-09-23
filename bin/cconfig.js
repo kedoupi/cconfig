@@ -10,8 +10,11 @@ const chalk = require('chalk');
 const inquirer = require('inquirer');
 const fs = require('fs-extra');
 const path = require('path');
-const os = require('os');
 const Table = require('cli-table3');
+
+// Import modules
+const config = require('../lib/config');
+const providers = require('../lib/providers');
 
 // Disable chalk colors when stdout is not a TTY unless explicitly overridden
 if (
@@ -24,114 +27,15 @@ if (
 // Import package.json for version
 const packageJson = require('../package.json');
 
-// Configuration
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const CONFIG_DIR = path.join(CLAUDE_DIR, 'cconfig');
-const PROVIDERS_DIR = path.join(CONFIG_DIR, 'providers');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-
-// Ensure directories exist
-async function ensureDirectories() {
-  try {
-    await fs.ensureDir(CONFIG_DIR);
-    await fs.ensureDir(PROVIDERS_DIR);
-    if (!(await fs.pathExists(CONFIG_FILE))) {
-      await fs.writeJson(CONFIG_FILE, { defaultProvider: null });
-    }
-  } catch (error) {
-    console.error(chalk.red(`配置初始化失败: ${error.message}`));
-    console.error(chalk.yellow(`请检查目录权限: ${CONFIG_DIR}`));
-    process.exit(1);
-  }
-}
-
-// Helpers
-function isWindows() {
-  return process.platform === 'win32';
-}
-
-function validateAlias(alias) {
-  const ALIAS_RE = /^[a-zA-Z0-9_-]{1,64}$/;
-  if (!alias || !ALIAS_RE.test(alias)) {
-    throw new Error('别名仅允许字母、数字、下划线、短横线，且长度<=64');
-  }
-}
-
-function getProviderFile(alias) {
-  validateAlias(alias);
-  const file = path.join(PROVIDERS_DIR, `${alias}.json`);
-  // Basic path safety (defense-in-depth after regex)
-  const resolved = path.resolve(file);
-  const providersRoot = path.resolve(PROVIDERS_DIR) + path.sep;
-  if (!resolved.startsWith(providersRoot)) {
-    throw new Error('非法的别名导致的路径问题');
-  }
-  return file;
-}
-
-// Note: Private hostname detection removed as HTTPS enforcement was dropped.
-
-function validateApiUrlSecure(urlStr) {
-  try {
-    const url = new URL(urlStr);
-    const protocol = url.protocol;
-    if (protocol !== 'http:' && protocol !== 'https:') {
-      return '请输入有效的 HTTP 或 HTTPS URL';
-    }
-    return true;
-  } catch {
-    return '请输入有效的 URL 格式';
-  }
-}
-
-function formatRelativeTime(isoStr) {
-  try {
-    const t = new Date(isoStr).getTime();
-    if (Number.isNaN(t)) {
-      return '-';
-    }
-    const now = Date.now();
-    const diffSec = Math.max(0, Math.floor((now - t) / 1000));
-    if (diffSec < 60) {
-      return '刚刚';
-    }
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) {
-      return `${diffMin} 分钟前`;
-    }
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) {
-      return `${diffHour} 小时前`;
-    }
-    const diffDay = Math.floor(diffHour / 24);
-    if (diffDay < 7) {
-      return `${diffDay} 天前`;
-    }
-    return new Date(isoStr).toLocaleString();
-  } catch {
-    return '-';
-  }
-}
-
-function truncateMiddle(str, maxLen) {
-  if (typeof str !== 'string') {
-    return '';
-  }
-  if (str.length <= maxLen) {
-    return str;
-  }
-  if (maxLen <= 3) {
-    return str.slice(0, maxLen);
-  }
-  const half = Math.floor((maxLen - 3) / 2);
-  return (
-    str.slice(0, half) + '...' + str.slice(str.length - (maxLen - 3 - half))
-  );
-}
-
 // Simple provider operations
 async function addProvider() {
-  await ensureDirectories();
+  try {
+    await config.ensureDirectories();
+  } catch (error) {
+    console.error(chalk.red(error.message));
+    console.error(chalk.yellow(`请检查目录权限: ${config.config.CONFIG_DIR}`));
+    process.exit(1);
+  }
 
   const answers = await inquirer.prompt([
     {
@@ -140,13 +44,13 @@ async function addProvider() {
       message: '配置别名（字母/数字/下划线/短横线）:',
       validate: async input => {
         try {
-          validateAlias(input.trim());
+          config.config.validateAlias(input.trim());
         } catch (e) {
           return e.message;
         }
         // 重名检查
         try {
-          const file = getProviderFile(input.trim());
+          const file = config.config.getProviderFile(input.trim());
           if (await fs.pathExists(file)) {
             return `别名已存在：${input.trim()}`;
           }
@@ -161,7 +65,7 @@ async function addProvider() {
       name: 'apiUrl',
       message: 'API URL:',
       default: 'https://api.anthropic.com',
-      validate: input => validateApiUrlSecure(input),
+      validate: input => config.config.validateApiUrlSecure(input),
     },
     {
       type: 'password',
@@ -172,52 +76,17 @@ async function addProvider() {
     },
   ]);
 
-  let providerFile;
   try {
-    providerFile = getProviderFile(answers.alias);
-  } catch (e) {
-    console.error(chalk.red(e.message));
-    process.exit(1);
-  }
-  try {
-    const provider = {
-      alias: answers.alias,
-      apiUrl: answers.apiUrl,
-      apiKey: answers.apiKey,
-      createdAt: new Date().toISOString(),
-    };
-
-    await fs.writeJson(providerFile, provider);
-    // Secure permissions (best-effort on non-Windows)
-    if (!isWindows()) {
-      try {
-        await fs.chmod(providerFile, 0o600);
-      } catch (e) {
-        // 忽略权限设置失败（在非类 Unix 系统可能不支持）
-      }
-    }
+    await providers.createProvider(answers.alias, answers.apiUrl, answers.apiKey);
 
     // If no default provider yet, set this as default
-    try {
-      const config = await fs.readJson(CONFIG_FILE);
-      if (!config.defaultProvider) {
-        config.defaultProvider = answers.alias;
-        await fs.writeJson(CONFIG_FILE, config);
-        // update lastUsed to now for the newly added default
-        try {
-          const p = await fs.readJson(providerFile);
-          p.lastUsed = new Date().toISOString();
-          await fs.writeJson(providerFile, p);
-        } catch (e) {
-          // 忽略 lastUsed 更新失败
-        }
-        console.log(
-          chalk.green(`✓ Provider '${answers.alias}' added and set as default`)
-        );
-        return;
-      }
-    } catch (e) {
-      // 忽略读取/写入默认配置失败
+    const defaultProvider = await providers.getDefaultProvider();
+    if (!defaultProvider) {
+      await providers.setDefaultProvider(answers.alias);
+      console.log(
+        chalk.green(`✓ Provider '${answers.alias}' added and set as default`)
+      );
+      return;
     }
 
     console.log(
@@ -231,11 +100,11 @@ async function addProvider() {
 }
 
 async function listProviders() {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
   let jsonFiles;
   try {
-    const files = await fs.readdir(PROVIDERS_DIR);
+    const files = await fs.readdir(config.PROVIDERS_DIR);
     jsonFiles = files.filter(f => f.endsWith('.json'));
 
     if (jsonFiles.length === 0) {
@@ -245,11 +114,11 @@ async function listProviders() {
     }
   } catch (error) {
     console.error(chalk.red(`读取 Provider 列表失败: ${error.message}`));
-    console.error(chalk.yellow(`请检查目录权限: ${PROVIDERS_DIR}`));
+    console.error(chalk.yellow(`请检查目录权限: ${config.PROVIDERS_DIR}`));
     process.exit(1);
   }
 
-  const config = await fs.readJson(CONFIG_FILE);
+  const configData = await fs.readJson(config.CONFIG_FILE);
 
   // Dynamic table widths based on terminal width
   const termWidth =
@@ -272,10 +141,10 @@ async function listProviders() {
   });
 
   for (const file of jsonFiles) {
-    const provider = await fs.readJson(path.join(PROVIDERS_DIR, file));
-    const isDefault = provider.alias === config.defaultProvider;
+    const provider = await fs.readJson(path.join(config.PROVIDERS_DIR, file));
+    const isDefault = provider.alias === configData.defaultProvider;
     const lastUsed = provider.lastUsed
-      ? formatRelativeTime(provider.lastUsed)
+      ? config.formatRelativeTime(provider.lastUsed)
       : '-';
     const url = String(provider.apiUrl || '');
     const maxUrlLen = urlWidth - 2; // keep within cell
@@ -293,11 +162,11 @@ async function listProviders() {
 }
 
 async function showProvider(alias) {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
   let providerFile;
   try {
-    providerFile = getProviderFile(alias);
+    providerFile = config.getProviderFile(alias);
   } catch (e) {
     console.log(chalk.red(e.message));
     return;
@@ -314,11 +183,11 @@ async function showProvider(alias) {
 }
 
 async function editProvider(alias) {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
   let providerFile;
   try {
-    providerFile = getProviderFile(alias);
+    providerFile = config.getProviderFile(alias);
   } catch (e) {
     console.log(chalk.red(e.message));
     return;
@@ -336,7 +205,7 @@ async function editProvider(alias) {
       name: 'apiUrl',
       message: 'API URL:',
       default: provider.apiUrl,
-      validate: input => validateApiUrlSecure(input),
+      validate: input => config.validateApiUrlSecure(input),
     },
     {
       type: 'password',
@@ -353,7 +222,7 @@ async function editProvider(alias) {
   provider.updatedAt = new Date().toISOString();
 
   await fs.writeJson(providerFile, provider);
-  if (!isWindows()) {
+  if (!config.isWindows()) {
     try {
       await fs.chmod(providerFile, 0o600);
     } catch (e) {
@@ -365,11 +234,11 @@ async function editProvider(alias) {
 }
 
 async function removeProvider(alias) {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
   let providerFile;
   try {
-    providerFile = getProviderFile(alias);
+    providerFile = config.getProviderFile(alias);
   } catch (e) {
     console.log(chalk.red(e.message));
     return;
@@ -392,10 +261,10 @@ async function removeProvider(alias) {
     await fs.remove(providerFile);
     // 如果删除的是默认 provider，同步清空默认配置
     try {
-      const config = await fs.readJson(CONFIG_FILE);
-      if (config.defaultProvider === alias) {
-        config.defaultProvider = null;
-        await fs.writeJson(CONFIG_FILE, config);
+      const configData = await fs.readJson(config.CONFIG_FILE);
+      if (configData.defaultProvider === alias) {
+        configData.defaultProvider = null;
+        await fs.writeJson(config.CONFIG_FILE, configData);
         console.log(chalk.yellow('已清空默认配置'));
       }
     } catch (e) {
@@ -406,11 +275,11 @@ async function removeProvider(alias) {
 }
 
 async function useProvider(alias) {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
   if (!alias) {
     // Interactive selection
-    const files = await fs.readdir(PROVIDERS_DIR);
+    const files = await fs.readdir(config.PROVIDERS_DIR);
     const jsonFiles = files.filter(f => f.endsWith('.json'));
 
     if (jsonFiles.length === 0) {
@@ -421,7 +290,7 @@ async function useProvider(alias) {
 
     const providers = [];
     for (const file of jsonFiles) {
-      const provider = await fs.readJson(path.join(PROVIDERS_DIR, file));
+      const provider = await fs.readJson(path.join(config.PROVIDERS_DIR, file));
       providers.push(provider.alias);
     }
 
@@ -438,7 +307,7 @@ async function useProvider(alias) {
 
   let providerFile;
   try {
-    providerFile = getProviderFile(alias);
+    providerFile = config.getProviderFile(alias);
   } catch (e) {
     console.log(chalk.red(e.message));
     return;
@@ -448,9 +317,9 @@ async function useProvider(alias) {
     return;
   }
 
-  const config = await fs.readJson(CONFIG_FILE);
-  config.defaultProvider = alias;
-  await fs.writeJson(CONFIG_FILE, config);
+  const configData = await fs.readJson(config.CONFIG_FILE);
+  configData.defaultProvider = alias;
+  await fs.writeJson(config.CONFIG_FILE, configData);
 
   // 更新 lastUsed 字段
   try {
@@ -465,10 +334,10 @@ async function useProvider(alias) {
 }
 
 async function outputEnv(options) {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
-  const config = await fs.readJson(CONFIG_FILE);
-  const alias = options.provider || config.defaultProvider;
+  const configData = await fs.readJson(config.CONFIG_FILE);
+  const alias = options.provider || configData.defaultProvider;
 
   if (!alias) {
     console.error('# No default provider configured');
@@ -479,7 +348,7 @@ async function outputEnv(options) {
 
   let providerFile;
   try {
-    providerFile = getProviderFile(alias);
+    providerFile = config.getProviderFile(alias);
   } catch (e) {
     console.error(`# ${e.message}`);
     process.exit(1);
@@ -504,27 +373,27 @@ async function outputEnv(options) {
 }
 
 async function statusCommand(options = {}) {
-  await ensureDirectories();
+  await config.ensureDirectories();
 
   let jsonFiles = [];
   try {
-    const files = await fs.readdir(PROVIDERS_DIR);
+    const files = await fs.readdir(config.PROVIDERS_DIR);
     jsonFiles = files.filter(f => f.endsWith('.json'));
   } catch (error) {
     console.error(chalk.red(`读取 Provider 列表失败: ${error.message}`));
     process.exit(1);
   }
 
-  const config = await fs.readJson(CONFIG_FILE);
-  const defaultAlias = config.defaultProvider || null;
+  const configData = await fs.readJson(config.CONFIG_FILE);
+  const defaultAlias = configData.defaultProvider || null;
 
   console.log(chalk.cyan('系统状态'));
-  console.log(`配置目录: ${CONFIG_DIR}`);
+  console.log(`配置目录: ${config.CONFIG_DIR}`);
   console.log(`配置数量: ${jsonFiles.length}`);
   console.log(`默认配置: ${defaultAlias ? defaultAlias : '无'}`);
 
   if (defaultAlias) {
-    const defaultFile = path.join(PROVIDERS_DIR, `${defaultAlias}.json`);
+    const defaultFile = path.join(config.PROVIDERS_DIR, `${defaultAlias}.json`);
     if (!(await fs.pathExists(defaultFile))) {
       console.log(chalk.yellow('警告: 默认配置文件不存在，请重新设置默认配置'));
     }
@@ -534,9 +403,9 @@ async function statusCommand(options = {}) {
     console.log('\n详细信息:');
     for (const file of jsonFiles) {
       try {
-        const provider = await fs.readJson(path.join(PROVIDERS_DIR, file));
+        const provider = await fs.readJson(path.join(config.PROVIDERS_DIR, file));
         const last = provider.lastUsed
-          ? formatRelativeTime(provider.lastUsed)
+          ? config.formatRelativeTime(provider.lastUsed)
           : '-';
         const mark =
           provider.alias === defaultAlias ? chalk.green('[默认] ') : '';
@@ -604,14 +473,14 @@ program
   .action(statusCommand);
 
 async function doctorCommand(options = {}) {
-  await ensureDirectories();
+  await config.ensureDirectories();
   let ok = true;
 
   console.log(chalk.cyan('系统诊断'));
 
   // 1) 配置目录检查
   try {
-    const exists = await fs.pathExists(CONFIG_DIR);
+    const exists = await fs.pathExists(config.CONFIG_DIR);
     console.log(`配置目录: ${exists ? chalk.green('OK') : chalk.red('缺失')}`);
     if (!exists) {
       ok = false;
@@ -623,20 +492,20 @@ async function doctorCommand(options = {}) {
 
   // 2) 默认配置有效性
   try {
-    const config = await fs.readJson(CONFIG_FILE);
-    const def = config.defaultProvider;
+    const configData = await fs.readJson(config.CONFIG_FILE);
+    const def = configData.defaultProvider;
     if (!def) {
       console.log('默认配置: 未设置');
     } else {
-      const file = path.join(PROVIDERS_DIR, `${def}.json`);
+      const file = path.join(config.PROVIDERS_DIR, `${def}.json`);
       if (await fs.pathExists(file)) {
         console.log(`默认配置: ${def} (${chalk.green('OK')})`);
       } else {
         console.log(chalk.yellow(`默认配置无效: ${def}（文件不存在）`));
         ok = false;
         if (options.fix) {
-          config.defaultProvider = null;
-          await fs.writeJson(CONFIG_FILE, config);
+          configData.defaultProvider = null;
+          await fs.writeJson(config.CONFIG_FILE, configData);
           console.log(chalk.green('已修复: 已清空默认配置'));
         }
       }
@@ -647,14 +516,14 @@ async function doctorCommand(options = {}) {
   }
 
   // 3) 权限检查（类 Unix）
-  if (!isWindows()) {
+  if (!config.isWindows()) {
     try {
-      const files = await fs.readdir(PROVIDERS_DIR);
+      const files = await fs.readdir(config.PROVIDERS_DIR);
       for (const f of files) {
         if (!f.endsWith('.json')) {
           continue;
         }
-        const full = path.join(PROVIDERS_DIR, f);
+        const full = path.join(config.PROVIDERS_DIR, f);
         const st = await fs.stat(full);
         const mode = st.mode & parseInt('777', 8);
         if (mode !== 0o600) {
@@ -682,19 +551,19 @@ async function doctorCommand(options = {}) {
 
   // 4) Provider JSON 结构校验
   try {
-    const files = await fs.readdir(PROVIDERS_DIR);
+    const files = await fs.readdir(config.PROVIDERS_DIR);
     for (const f of files) {
       if (!f.endsWith('.json')) {
         continue;
       }
-      const full = path.join(PROVIDERS_DIR, f);
+      const full = path.join(config.PROVIDERS_DIR, f);
       try {
         const data = await fs.readJson(full);
         const base = path.basename(f, '.json');
         // alias 校验
         let aliasOk = true;
         try {
-          validateAlias(data.alias);
+          config.validateAlias(data.alias);
         } catch (e) {
           console.log(chalk.yellow(`结构警告: ${f} 别名无效 (${e.message})`));
           aliasOk = false;
@@ -710,7 +579,7 @@ async function doctorCommand(options = {}) {
           if (options.fix) {
             data.alias = base;
             await fs.writeJson(full, data);
-            if (!isWindows()) {
+            if (!config.isWindows()) {
               try {
                 await fs.chmod(full, 0o600);
               } catch (e) {
@@ -721,7 +590,7 @@ async function doctorCommand(options = {}) {
           }
         }
         // URL 校验
-        const urlCheck = validateApiUrlSecure(data.apiUrl || '');
+        const urlCheck = config.validateApiUrlSecure(data.apiUrl || '');
         if (urlCheck !== true) {
           console.log(chalk.yellow(`结构警告: ${f} URL 无效: ${urlCheck}`));
           ok = false;

@@ -1,6 +1,6 @@
 {
   "name": "@kedoupi/cconfig",
-  "version": "2.0.0",
+  "version": "1.1.0",
   "description": "CConfig - simple and secure Claude API configuration management",
   "main": "bin/cconfig.js",
   "bin": {
@@ -44,13 +44,12 @@
     "chalk": "^4.1.2",
     "cli-table3": "^0.6.5",
     "commander": "^11.1.0",
-    "fs-extra": "^11.3.2",
+    "fs-extra": "^11.2.0",
     "inquirer": "^8.2.7",
     "ora": "^5.4.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.8",
-    "benchmark": "^2.1.4",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-node": "^11.1.0",
@@ -58,7 +57,8 @@
     "jest": "^29.7.0",
     "jsdoc": "^4.0.2",
     "lint-staged": "^15.2.0",
-    "prettier": "^3.1.1"
+    "prettier": "^3.1.1",
+    "benchmark": "^2.1.4"
   },
   "repository": {
     "type": "git",
@@ -70,7 +70,6 @@
   "homepage": "https://github.com/kedoupi/cconfig#readme",
   "files": [
     "bin/",
-    "lib/",
     "install.sh",
     "setup.sh",
     "cconfig.sh",
