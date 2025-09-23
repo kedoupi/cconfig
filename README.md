@@ -194,12 +194,19 @@ CConfig 将配置存储在 `~/.cconfig/` 目录：
 
 ### 🔄 从旧版本迁移
 
-如果您之前使用的是旧版本（配置在
-`~/.claude/cconfig/`），CConfig 会在首次运行时自动迁移您的配置到新位置 `~/.cconfig/`。迁移过程：
+从 v1.1.0 开始，CConfig 已迁移配置路径：
 
-1. **自动检测**：检查旧配置目录是否存在
-2. **安全迁移**：将所有配置文件复制到新位置
-3. **保留备份**：旧配置目录保留，您可以手动删除
+- **旧路径**：`~/.claude/cconfig/` (v1.0.x 及之前)
+- **新路径**：`~/.cconfig/` (v1.1.0+)
+
+如果您有旧版本配置，请手动迁移：
+
+```bash
+# 迁移配置文件
+mv ~/.claude/cconfig/* ~/.cconfig/
+# 删除旧目录（可选）
+rm -rf ~/.claude/cconfig
+```
 
 ### 配置文件格式（示例）
 
@@ -230,9 +237,30 @@ npm install
 # 运行测试
 npm test
 
+# 代码检查和格式化
+npm run lint
+npm run format
+
 # 本地测试
 npm install -g .
 cconfig --help
+```
+
+### 项目结构
+
+```
+cconfig/
+├── bin/                     # CLI 入口
+│   └── cconfig.js          # 主程序
+├── lib/                     # 核心模块 (v2.0.0+)
+│   ├── config.js           # 配置管理
+│   └── providers.js        # 提供商操作
+├── tests/                   # 测试文件
+│   ├── unit/               # 单元测试
+│   └── integration/        # 集成测试
+├── install.sh              # 一键安装脚本
+├── setup.sh                # 开发环境设置
+└── cconfig.sh              # Shell 集成函数
 ```
 
 ### CI 发布（GitHub Actions）
@@ -286,13 +314,23 @@ npm run format           # 代码格式化
 
 ## 📝 更新日志
 
+### v2.0.0 (2025-09-24)
+
+- **🏗️ 重大架构重构**：将代码模块化，分离配置和提供商管理逻辑到 `lib/` 目录
+- **📦 新增模块**：
+  - `lib/config.js` - 配置管理核心功能
+  - `lib/providers.js` - 提供商操作 API
+- **🧹 代码优化**：精简主程序 `bin/cconfig.js`，提高代码可维护性
+- **✅ 测试覆盖**：为新模块添加完整的单元测试
+- **📚 文档更新**：同步更新 README 和相关文档
+
 ### v1.0.0
 
 - 初始公开发布（npm 包：`@kedoupi/cconfig`）
 - 放宽 URL 校验：不再强制非本地/内网地址必须使用 HTTPS（仍要求 http/https 协议，推荐公网使用 HTTPS）
 - 首个 Provider 自动设为默认：首次添加配置时自动写入 `defaultProvider` 并记录 `lastUsed`
-- API Key 输入改为“掩码显示”（inquirer `mask: '*'`），避免完全不回显带来的困扰
-- 安装脚本全中文化，并在“未配置 Provider”时提示执行 `cconfig add`
+- API Key 输入改为"掩码显示"（inquirer `mask: '*'`），避免完全不回显带来的困扰
+- 安装脚本全中文化，并在"未配置 Provider"时提示执行 `cconfig add`
 - 文档与提示统一中文，修正过时示例（去除无效的 dev-setup.sh 提示）
 
 ## 📄 许可证
