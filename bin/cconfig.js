@@ -15,6 +15,7 @@ const Table = require('cli-table3');
 // Import modules
 const config = require('../lib/config');
 const providers = require('../lib/providers');
+const ErrorHandler = require('../lib/error-handler');
 
 // Disable chalk colors when stdout is not a TTY unless explicitly overridden
 if (!process.stdout.isTTY && process.env.CCONFIG_ALLOW_COLOR_IN_PIPES !== '1') {
@@ -30,7 +31,7 @@ async function addProvider() {
     await config.ensureDirectories();
   } catch (error) {
     console.error(chalk.red(error.message));
-    console.error(chalk.yellow(`请检查目录权限: ${config.config.CONFIG_DIR}`));
+    console.error(chalk.yellow(`请检查目录权限: ${config.CONFIG_DIR}`));
     process.exit(1);
   }
 
@@ -41,13 +42,13 @@ async function addProvider() {
       message: '配置别名（字母/数字/下划线/短横线）:',
       validate: async input => {
         try {
-          config.config.validateAlias(input.trim());
+          config.validateAlias(input.trim());
         } catch (e) {
           return e.message;
         }
         // 重名检查
         try {
-          const file = config.config.getProviderFile(input.trim());
+          const file = config.getProviderFile(input.trim());
           if (await fs.pathExists(file)) {
             return `别名已存在：${input.trim()}`;
           }
@@ -62,7 +63,7 @@ async function addProvider() {
       name: 'apiUrl',
       message: 'API URL:',
       default: 'https://api.anthropic.com',
-      validate: input => config.config.validateApiUrlSecure(input),
+      validate: input => config.validateApiUrlSecure(input),
     },
     {
       type: 'password',
@@ -114,8 +115,7 @@ async function listProviders() {
       return;
     }
   } catch (error) {
-    console.error(chalk.red(`读取 Provider 列表失败: ${error.message}`));
-    console.error(chalk.yellow(`请检查目录权限: ${config.PROVIDERS_DIR}`));
+    ErrorHandler.handleError(error, '读取 Provider 列表');
     process.exit(1);
   }
 

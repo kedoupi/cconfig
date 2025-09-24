@@ -2,6 +2,11 @@
  * Jest Global Setup
  * 测试全局设置
  */
+const fs = require('fs-extra');
+const path = require('path');
+
+// 测试环境标识（必须在最前面设置）
+process.env.NODE_ENV = 'test';
 
 // 全局测试超时设置
 jest.setTimeout(30000);
@@ -18,5 +23,15 @@ global.console = {
 // 全局测试辅助函数
 global.sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// 测试环境标识
-process.env.NODE_ENV = 'test';
+// 测试配置目录隔离
+const TEST_DIR = path.join(__dirname, '..', '..', 'test-temp');
+
+// 每个测试文件运行前清理测试目录
+beforeEach(async () => {
+  await fs.remove(TEST_DIR);
+});
+
+// 所有测试完成后清理
+afterAll(async () => {
+  await fs.remove(TEST_DIR);
+});

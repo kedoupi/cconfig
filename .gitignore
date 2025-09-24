@@ -39,6 +39,7 @@ Thumbs.db
 
 ### Test artifacts
 test-results/
+test-temp/
 *.test.json
 phase*-test-report.json
 test-installation-report.json
