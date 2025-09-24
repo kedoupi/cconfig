@@ -1,4 +1,4 @@
-const Validator = require('../lib/validator');
+const Validator = require('../../lib/validator');
 
 describe('Validator - 简化版', () => {
   describe('validateProvider', () => {

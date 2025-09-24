@@ -12,7 +12,7 @@ describe('CConfig CLI', () => {
   
   test('should show version information', () => {
     const output = execSync(`node ${CLI_PATH} --version`, { encoding: 'utf8' });
-    expect(output).toContain('2.0.0');
+    expect(output).toContain('2.1.0');
   });
 
   test('should show help information', () => {

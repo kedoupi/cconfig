@@ -1,4 +1,4 @@
-const ErrorHandler = require('../lib/error-handler');
+const ErrorHandler = require('../../lib/error-handler');
 
 describe('ErrorHandler', () => {
   let consoleSpy;
