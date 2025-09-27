@@ -1,73 +1,92 @@
 #!/bin/bash
 # CConfig 安装脚本
-# 适用于从发布包或一键安装方式
-# 用法: curl -fsSL https://raw.githubusercontent.com/kedoupi/cconfig/main/install.sh | bash
-# 或者: 下载后执行 ./install.sh
 
 set -e
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Track whether shell integration existed before this run (to detect first install)
+# Track whether shell integration existed before this run (to detect first setup)
 WAS_INTEGRATED_BEFORE=0
 
 log() {
     case "$1" in
         INFO) echo -e "${BLUE}ℹ️  $2${NC}" ;;
         SUCCESS) echo -e "${GREEN}✅ $2${NC}" ;;
+        WARN) echo -e "${YELLOW}⚠️  $2${NC}" ;;
         ERROR) echo -e "${RED}❌ $2${NC}"; exit 1 ;;
     esac
 }
 
-# 环境检查
-if ! command -v node >/dev/null 2>&1; then
-    log ERROR "需要安装 Node.js： https://nodejs.org/"
-fi
-
-if ! command -v npm >/dev/null 2>&1; then
-    log ERROR "需要安装 npm（随 Node.js 提供）： https://nodejs.org/"
-fi
-
-# 检查 Node.js 版本
-node_version=$(node --version | sed 's/v//' | cut -d. -f1)
-if [[ "$node_version" -lt 18 ]]; then
-    log ERROR "需要 Node.js 18+，当前版本：v$node_version"
-fi
-
-# 检测安装模式（开发/全局）
-detect_dev_mode() {
-    local script_dir
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    [[ -f "${script_dir}/package.json" && -f "${script_dir}/bin/cconfig.js" ]]
+# Check if in project directory
+check_project_directory() {
+    if [[ ! -f "package.json" || ! -f "bin/cconfig.js" ]]; then
+        log ERROR "请在 CConfig 项目根目录运行此脚本"
+    fi
+    log SUCCESS "项目目录已验证"
 }
 
-# 安装 CConfig
-if detect_dev_mode; then
-    log INFO "检测到开发模式"
-    script_dir="$(cd "$(dirname "$0")" && pwd)"
-    CCONFIG_CMD="node '${script_dir}/bin/cconfig.js'"
+# Check dependencies
+check_dependencies() {
+    log INFO "正在检查系统依赖..."
     
-    # 如需则安装依赖
-    if [[ ! -d "${script_dir}/node_modules" ]]; then
-        log INFO "正在安装开发依赖..."
-        (cd "$script_dir" && npm install >/dev/null 2>&1)
+    if ! command -v node >/dev/null 2>&1; then
+        log ERROR "需要安装 Node.js： https://nodejs.org/"
     fi
-    log SUCCESS "开发模式就绪"
-else
-    log INFO "正在全局安装 CConfig..."
-    if npm install -g @kedoupi/cconfig >/dev/null 2>&1; then
-        log SUCCESS "CConfig 安装成功"
-        CCONFIG_CMD="cconfig"
-    else
-        log ERROR "CConfig 安装失败"
+    
+    node_version=$(node --version | sed 's/v//' | cut -d. -f1)
+    if [[ "$node_version" -lt 18 ]]; then
+        log ERROR "需要 Node.js 18+，当前版本：v$node_version"
     fi
-fi
+    
+    log SUCCESS "Node.js $(node --version) ✓"
+    
+    if ! command -v npm >/dev/null 2>&1; then
+        log ERROR "需要安装 npm"
+    fi
+    log SUCCESS "依赖检查通过"
+}
 
-# 检测 Shell 配置文件
+# Install project dependencies
+install_dependencies() {
+    log INFO "正在安装项目依赖..."
+    
+    if [[ ! -d "node_modules" ]]; then
+        npm install || log ERROR "依赖安装失败"
+        log SUCCESS "依赖安装完成"
+    else
+        log SUCCESS "依赖已安装"
+    fi
+}
+
+# Install CLI tools
+install_cli_tools() {
+    log INFO "正在安装 CLI 工具..."
+    
+    # Claude CLI
+    if ! command -v claude >/dev/null 2>&1; then
+        log INFO "正在安装 Claude CLI..."
+        npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || log ERROR "Claude CLI 安装失败"
+        log SUCCESS "Claude CLI 安装完成"
+    else
+        log SUCCESS "已安装 Claude CLI"
+    fi
+    
+    # Optional tools
+    for tool in jq; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            log SUCCESS "$tool 已安装"
+        else
+            log WARN "未找到 $tool（推荐安装以获得更好体验）"
+        fi
+    done
+}
+
+# Detect shell config
 detect_shell_config() {
     case "${SHELL##*/}" in
         zsh) echo "${ZDOTDIR:-$HOME}/.zshrc" ;;
@@ -83,96 +102,39 @@ detect_shell_config() {
     esac
 }
 
-# 安装 Shell 集成文件
+# Install shell integration file
 install_shell_integration_file() {
     local config_dir="$HOME/.cconfig"
     local integration_file="$config_dir/cconfig.sh"
-    local script_dir
+    local project_dir="$(pwd)"
 
-    # 创建配置目录
+    # Create config directory
     mkdir -p "$config_dir"
 
-    # 确定集成文件源路径
-    if detect_dev_mode; then
-        script_dir="$(cd "$(dirname "$0")" && pwd)"
-        cp "${script_dir}/cconfig.sh" "$integration_file"
-        # 记录开发安装路径
-        echo "$script_dir" > "$config_dir/.dev_install"
-    else
-        # 从npm包中复制文件（这里需要确保npm包包含cconfig.sh）
-        local npm_dir
-        npm_dir=$(npm root -g 2>/dev/null)/\@kedoupi/cconfig
-        if [[ -f "$npm_dir/cconfig.sh" ]]; then
-            cp "$npm_dir/cconfig.sh" "$integration_file"
-        else
-            # 如果npm包中没有，则内联创建
-            cat > "$integration_file" << 'SHELL_INTEGRATION_EOF'
-#!/bin/bash
-# CConfig Shell Integration
+    # Copy shell integration file
+    cp "./cconfig.sh" "$integration_file"
 
-# Enhanced Claude command with provider switching
-claude() {
-    local provider=""
-    local args=()
+    # Record development installation path
+    echo "$project_dir" > "$config_dir/.dev_install"
 
-    # Parse arguments
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -P|--provider)
-                provider="$2"
-                shift 2
-                ;;
-            --pp)
-                args+=("--dangerously-skip-permissions")
-                shift
-                ;;
-            *)
-                args+=("$1")
-                shift
-                ;;
-        esac
-    done
-
-    # Load environment variables
-    if [[ -n "$provider" ]]; then
-        eval "$(cconfig env --provider "$provider" 2>/dev/null)" || {
-            echo "❌ 加载 Provider '$provider' 失败"
-            echo "💡 运行：cconfig list"
-            return 1
-        }
-    else
-        eval "$(cconfig env 2>/dev/null)" || {
-            echo "❌ 尚未配置默认 Provider"
-            echo "💡 运行：cconfig add"
-            return 1
-        }
-    fi
-
-    # Execute claude with arguments
-    command claude "${args[@]}"
-}
-SHELL_INTEGRATION_EOF
-        fi
-    fi
-
-    log SUCCESS "Shell 集成文件已安装到：$integration_file"
+    log SUCCESS "Shell 集成文件已写入"
 }
 
-# 配置 Shell 集成
+# Setup shell integration
 setup_shell_integration() {
     local shell_config
     local integration_file="$HOME/.cconfig/cconfig.sh"
     shell_config="$(detect_shell_config)"
 
-    # 验证 shell 配置文件路径安全性
+    # 验证路径安全性
     if [[ ! "$shell_config" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
-        log ERROR "检测到无效的 Shell 配置文件路径"
+        log ERROR "Invalid shell config path detected"
         return 1
     fi
 
-    log INFO "正在配置 Shell 集成：$(basename "$shell_config")"
+    log INFO "正在配置 Shell 集成到 $(basename "$shell_config")"
 
-    # 安全地检查和移除旧配置
+    # Remove old configuration
     if [[ -f "$shell_config" ]] && grep -q "# CConfig Integration" "$shell_config" 2>/dev/null; then
         WAS_INTEGRATED_BEFORE=1
         if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -180,9 +142,10 @@ setup_shell_integration() {
         else
             sed -i.bak '/# CConfig Integration/,/# End CConfig Integration/d' "$shell_config"
         fi
+        log INFO "已移除旧的集成配置"
     fi
 
-    # 写入简化的集成配置
+    # Add new simplified configuration
     cat >> "$shell_config" << EOF
 
 # CConfig Integration
@@ -193,16 +156,16 @@ EOF
     log SUCCESS "Shell 集成配置完成"
 }
 
-# 如未配置 Provider，则提示用户进行配置
+# Prompt on first setup if no provider configured yet
 check_and_prompt_initial_config() {
     local config_dir="$HOME/.cconfig"
     local providers_dir="$config_dir/providers"
-    # Always prompt when no provider configured (first or subsequent installs)
+    # 第一次安装时，如果未配置任何 Provider，就提示一次
     if [[ ! -d "$providers_dir" ]] || ! ls -1 "$providers_dir"/*.json >/dev/null 2>&1; then
         echo
         log INFO "未检测到任何 API 端点配置"
-        echo "💡 现在可运行以下命令添加 Provider："
-        echo "   $CCONFIG_CMD add"
+        echo "💡 现在可运行以下命令添加 Provider:"
+        echo "   cconfig add"
     fi
 }
 
@@ -213,32 +176,31 @@ main() {
     echo "================"
     echo
     
-    # 检查是否安装 claude 命令
-    if ! command -v claude >/dev/null 2>&1; then
-        log INFO "正在安装 Claude CLI..."
-        if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
-            log SUCCESS "Claude CLI 安装完成"
-        else
-            log ERROR "Claude CLI 安装失败，请手动安装： npm install -g @anthropic-ai/claude-code"
-        fi
-    else
-        log SUCCESS "已安装 Claude CLI"
-    fi
-
+    check_project_directory
+    check_dependencies
+    install_dependencies
+    install_cli_tools
     install_shell_integration_file
     setup_shell_integration
     check_and_prompt_initial_config
-    
+
     echo
     log SUCCESS "安装完成！"
     echo
     echo "🔄 重新加载 Shell："
     echo "   source $(detect_shell_config | sed "s|$HOME|~|g")"
     echo
-    echo "🚀 快速开始："
-    echo "   $CCONFIG_CMD add          # 添加一个 Provider"
-    echo "   claude \"Hello!\"           # 与 Claude 对话"
-    echo "   claude -P custom \"Hi\"     # 使用指定 Provider"
+    echo "🚀 常用命令："
+    echo "   cconfig add              # 添加 Provider"
+    echo "   cconfig list             # 列出 Provider"
+    echo "   claude \"Hello!\"          # 与 Claude 对话"
+    echo "   claude -P custom \"Hi\"    # 使用指定 Provider"
+    echo "   claude --pp \"Quick\"      # 跳过权限检查"
+    echo
+    echo "🧪 开发："
+    echo "   npm test                 # 运行测试"
+    echo "   npm run lint             # 代码检查"
+    echo "   npm run reset            # 清理并重装依赖"
     echo
 }
 

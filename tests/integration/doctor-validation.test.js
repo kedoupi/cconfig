@@ -10,17 +10,21 @@ const { createTempTestDir, cleanupTempDir, setupTestConfig } = require('../helpe
 describe('doctor validation', () => {
   let tempDir;
   let originalHome;
+  let originalCconfigHome;
   let cliPath;
 
   beforeEach(async () => {
     tempDir = await createTempTestDir();
     originalHome = process.env.HOME;
+    originalCconfigHome = process.env.CCONFIG_HOME;
     process.env.HOME = tempDir;
+    process.env.CCONFIG_HOME = path.join(tempDir, '.cconfig');
     cliPath = path.resolve(__dirname, '../../bin/cconfig.js');
   });
 
   afterEach(async () => {
     process.env.HOME = originalHome;
+    process.env.CCONFIG_HOME = originalCconfigHome;
     await cleanupTempDir(tempDir);
   });
 

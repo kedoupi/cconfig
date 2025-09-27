@@ -72,7 +72,6 @@
     "bin/",
     "lib/",
     "install.sh",
-    "setup.sh",
     "cconfig.sh",
     "README.md"
   ],

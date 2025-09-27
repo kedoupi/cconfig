@@ -21,25 +21,15 @@ API 配置，就像使用 Git 配置一样简单直观。
 
 ### 安装
 
-一键安装（面向使用者）
-
-```bash
-curl -fsSL https://github.com/kedoupi/cconfig/raw/main/install.sh | bash
-```
-
-- install.sh 会自动：检查 Node 环境、安装 `cconfig`、检测并安装 `claude`
-  CLI、写入 Shell 集成（`claude()` 会先加载 `cconfig env`）。
-
-手动安装（面向开发者）
+当前仅提供手动安装流程：
 
 ```bash
 git clone https://github.com/kedoupi/cconfig.git
 cd cconfig
-./setup.sh
+./install.sh
 ```
 
-- setup.sh 会：安装依赖、运行测试、检测并安装 `claude` CLI、把 `cconfig()` 和 `claude()`
-  函数指向本仓库，方便开发调试。
+- `install.sh` 会：安装依赖、检测并安装 `claude` CLI、配置 Shell 集成，完成后即可使用仓库内的 CLI。
 
 ### 基本使用
 
@@ -258,8 +248,7 @@ cconfig/
 ├── tests/                   # 测试文件
 │   ├── unit/               # 单元测试
 │   └── integration/        # 集成测试
-├── install.sh              # 一键安装脚本
-├── setup.sh                # 开发环境设置
+├── install.sh              # 安装脚本
 └── cconfig.sh              # Shell 集成函数
 ```
 

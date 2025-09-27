@@ -122,9 +122,10 @@ describe('Config Module', () => {
 
   describe('constants', () => {
     test('should have correct directory paths', () => {
-      expect(config.CONFIG_DIR).toBe(path.join(os.homedir(), '.cconfig'));
-      expect(config.PROVIDERS_DIR).toBe(path.join(os.homedir(), '.cconfig', 'providers'));
-      expect(config.CONFIG_FILE).toBe(path.join(os.homedir(), '.cconfig', 'config.json'));
+      const expectedBase = process.env.CCONFIG_HOME || path.join(os.homedir(), '.cconfig');
+      expect(config.CONFIG_DIR).toBe(expectedBase);
+      expect(config.PROVIDERS_DIR).toBe(path.join(expectedBase, 'providers'));
+      expect(config.CONFIG_FILE).toBe(path.join(expectedBase, 'config.json'));
       expect(config.LEGACY_CONFIG_DIR).toBe(path.join(os.homedir(), '.claude', 'cconfig'));
     });
   });

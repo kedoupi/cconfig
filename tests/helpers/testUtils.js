@@ -41,7 +41,8 @@ function createTestProvider(overrides = {}) {
  * 创建测试配置目录结构
  */
 async function setupTestConfig(baseDir) {
-  const configDir = path.join(baseDir, '.cconfig');
+  const rootDir = baseDir ? path.join(baseDir, '.cconfig') : process.env.CCONFIG_HOME;
+  const configDir = rootDir;
   const providersDir = path.join(configDir, 'providers');
   
   await fs.ensureDir(configDir);

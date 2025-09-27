@@ -10,15 +10,19 @@ const { createTempTestDir, cleanupTempDir, setupTestConfig, createTestProvider }
 describe('use command updates lastUsed', () => {
   let tempDir;
   let originalHome;
+  let originalCconfigHome;
 
   beforeEach(async () => {
     tempDir = await createTempTestDir();
     originalHome = process.env.HOME;
+    originalCconfigHome = process.env.CCONFIG_HOME;
     process.env.HOME = tempDir;
+    process.env.CCONFIG_HOME = path.join(tempDir, '.cconfig');
   });
 
   afterEach(async () => {
     process.env.HOME = originalHome;
+    process.env.CCONFIG_HOME = originalCconfigHome;
     await cleanupTempDir(tempDir);
   });
 

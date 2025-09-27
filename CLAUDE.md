@@ -36,7 +36,7 @@ CConfig 是一个专为 Claude API 设计的配置管理 CLI 工具，采用模�
 npm install
 
 # 本地开发调试
-./setup.sh  # 自动设置开发环境，链接本地 cconfig 函数
+./install.sh  # 自动安装并链接本地 cconfig 函数
 
 # 全局安装本地版本（用于测试）
 npm install -g .

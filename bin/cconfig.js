@@ -634,11 +634,28 @@ program
   .option('--fix', '诊断并尝试修复问题')
   .action(doctorCommand);
 
-// Show help if no command provided
-if (!process.argv.slice(2).length) {
-  console.log('CConfig - Claude Configuration Manager');
-  console.log('简单、安全的 Claude API 配置管理工具\n');
-  program.outputHelp();
-} else {
-  program.parse(process.argv);
+// Show help if executed directly without command arguments
+if (require.main === module) {
+  if (!process.argv.slice(2).length) {
+    console.log('CConfig - Claude Configuration Manager');
+    console.log('简单、安全的 Claude API 配置管理工具\n');
+    program.outputHelp();
+  } else {
+    program.parse(process.argv);
+  }
 }
+
+module.exports = {
+  program,
+  commands: {
+    addProvider,
+    listProviders,
+    showProvider,
+    editProvider,
+    removeProvider,
+    useProvider,
+    outputEnv,
+    statusCommand,
+    doctorCommand,
+  },
+};

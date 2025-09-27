@@ -26,9 +26,13 @@ global.sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // 测试配置目录隔离
 const TEST_DIR = path.join(__dirname, '..', '..', 'test-temp');
 
+// 为测试指定隔离的 CConfig Home 目录
+process.env.CCONFIG_HOME = path.join(TEST_DIR, '.cconfig');
+
 // 每个测试文件运行前清理测试目录
 beforeEach(async () => {
   await fs.remove(TEST_DIR);
+  await fs.ensureDir(process.env.CCONFIG_HOME);
 });
 
 // 所有测试完成后清理
